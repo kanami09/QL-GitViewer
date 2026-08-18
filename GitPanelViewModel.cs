@@ -25,6 +25,7 @@ namespace QuickLook.Plugin.GitViewer
         private string _shortHash;
         private string _stashText;
         private string _syncText;
+        private string _toastText;
         private IList<GitRefInfo> _tags = new List<GitRefInfo>();
         private string _upstreamText;
 
@@ -166,6 +167,19 @@ namespace QuickLook.Plugin.GitViewer
         }
 
         public bool HasError => !string.IsNullOrEmpty(_errorMessage);
+
+        /// <summary>复制后在面板底部一闪而过的提示文字。</summary>
+        public string ToastText
+        {
+            get { return _toastText; }
+            set
+            {
+                Set(ref _toastText, value);
+                OnPropertyChanged("HasToast");
+            }
+        }
+
+        public bool HasToast => !string.IsNullOrEmpty(_toastText);
 
         public IList<GitCommitInfo> Commits
         {

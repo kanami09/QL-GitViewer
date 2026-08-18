@@ -2,11 +2,11 @@
 using QuickLook.Plugin.GitViewer.Git;
 using System;
 using System.Collections.Generic;
-using System.Globalization;
-using System.Threading;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Interop;
+using System.Windows.Threading;
 
 namespace QuickLook.Plugin.GitViewer
 {
@@ -17,6 +17,7 @@ namespace QuickLook.Plugin.GitViewer
     public partial class GitPanel : UserControl
     {
         private readonly GitPanelViewModel _model = new GitPanelViewModel();
+        private DispatcherTimer _toastTimer;
 
         public GitPanel()
         {
@@ -180,40 +181,59 @@ namespace QuickLook.Plugin.GitViewer
         }
 
         /// <summary>
-        ///     写入剪贴板，失败会重试。
-        ///     剪贴板是全局独占资源，剪贴板管理器、Office、远程桌面等随时可能短暂占着它，
-        ///     一次就失败并抛 CLIPBRD_E_CANT_OPEN 是很常见的情况，隔几十毫秒重试基本都能成功。
+        ///     写入剪贴板并给出可见反馈。走 <see cref="ClipboardHelper" /> 的 Win32 路径，
+        ///     最坏阻塞约 100ms；WPF 的 Clipboard 一次失败就要阻塞约 1 秒，不能在这里用。
         /// </summary>
-        private static void CopyToClipboard(string text)
+        private void CopyToClipboard(string text)
         {
             if (string.IsNullOrEmpty(text))
                 return;
 
-            const int attempts = 10;
-            const int delayMs = 20;
+            var copied = ClipboardHelper.SetText(text, GetWindowHandle());
 
-            for (var i = 0; i < attempts; i++)
+            ShowToast(copied
+                ? Translate.Get("CopyDone", "Copied")
+                : Translate.Get("CopyFailed", "Copy failed: the clipboard is in use"));
+        }
+
+        /// <summary>
+        ///     取本控件所在窗口的句柄，用作剪贴板属主。
+        ///     控件还没挂到窗口上时返回 IntPtr.Zero。
+        /// </summary>
+        private IntPtr GetWindowHandle()
+        {
+            var source = PresentationSource.FromVisual(this) as HwndSource;
+            return source == null ? IntPtr.Zero : source.Handle;
+        }
+
+        /// <summary>在面板底部显示一条短暂提示，几秒后自动消失。</summary>
+        private void ShowToast(string message)
+        {
+            _model.ToastText = message;
+
+            if (_toastTimer == null)
             {
-                try
+                _toastTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2.5) };
+                _toastTimer.Tick += (sender, e) =>
                 {
-                    // copy: true 表示退出本进程后剪贴板内容依然保留。
-                    Clipboard.SetDataObject(text, true);
-                    return;
-                }
-                catch (Exception e)
-                {
-                    if (i == attempts - 1)
-                    {
-                        ProcessHelper.WriteLog(string.Format(CultureInfo.InvariantCulture,
-                            "GitViewer: could not copy to clipboard after {0} attempts: {1}",
-                            attempts, e.Message));
-                        return;
-                    }
-                }
-
-                // 这里在 UI 线程上，但只有失败路径才会走到，最坏也就卡住 200ms。
-                Thread.Sleep(delayMs);
+                    _toastTimer.Stop();
+                    _model.ToastText = null;
+                };
             }
+
+            // 重新计时，连续复制时提示不会提前消失。
+            _toastTimer.Stop();
+            _toastTimer.Start();
+        }
+
+        /// <summary>由 IViewer.Cleanup 调用，停掉计时器以免它继续持有本控件。</summary>
+        public void Cleanup()
+        {
+            if (_toastTimer == null)
+                return;
+
+            _toastTimer.Stop();
+            _toastTimer = null;
         }
     }
 }

@@ -95,7 +95,11 @@ namespace QuickLook.Plugin.GitViewer
                 _runner = null;
             }
 
-            _panel = null;
+            if (_panel != null)
+            {
+                _panel.Cleanup();
+                _panel = null;
+            }
         }
 
         /// <summary>

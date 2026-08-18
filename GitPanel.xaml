@@ -400,5 +400,15 @@
                 </Grid>
             </TabItem>
         </TabControl>
+
+        <!-- 复制反馈：浮在内容上方，不挤压布局，几秒后自动消失。 -->
+        <Border Grid.Row="1" VerticalAlignment="Bottom" HorizontalAlignment="Center"
+                Margin="0,0,0,18" Padding="14,7" CornerRadius="4"
+                Background="{DynamicResource ChipBackground}"
+                BorderBrush="{DynamicResource ChipBorder}" BorderThickness="1"
+                IsHitTestVisible="False"
+                Visibility="{Binding HasToast, Converter={StaticResource BoolToVis}}">
+            <TextBlock Text="{Binding ToastText}" Foreground="{DynamicResource ChipText}" FontSize="12" />
+        </Border>
     </Grid>
 </UserControl>
