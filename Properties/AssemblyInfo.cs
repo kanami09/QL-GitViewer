@@ -1,16 +1,16 @@
-﻿using System.Reflection;
+using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Windows;
 
 // General Information about an assembly is controlled through the following
 // set of attributes. Change these attribute values to modify the information
 // associated with an assembly.
-[assembly: AssemblyTitle("QuickLook.Plugin.HelloWorld")]
-[assembly: AssemblyDescription("")]
+[assembly: AssemblyTitle("QuickLook.Plugin.GitViewer")]
+[assembly: AssemblyDescription("Git repository preview plugin for QuickLook")]
 [assembly: AssemblyConfiguration("")]
-[assembly: AssemblyCompany("pooi.moe")]
-[assembly: AssemblyProduct("QuickLook.Plugin.HelloWorld")]
-[assembly: AssemblyCopyright("Copyright © Paddy Xu 2018")]
+[assembly: AssemblyCompany("")]
+[assembly: AssemblyProduct("QuickLook.Plugin.GitViewer")]
+[assembly: AssemblyCopyright("Copyright © Paddy Xu 2018, Kanami09 2026")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]
 
