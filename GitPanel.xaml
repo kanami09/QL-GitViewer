@@ -383,37 +383,28 @@
 
             <TabItem Header="{Binding BranchesHeader}">
                 <Grid>
-                    <ScrollViewer VerticalScrollBarVisibility="Auto"
-                                  Visibility="{Binding HasAnyBranch, Converter={StaticResource BoolToVis}}">
-                        <StackPanel>
-                            <TextBlock Text="{Binding LocalBranchesHeader}" Style="{StaticResource SectionHeaderStyle}"
-                                       Visibility="{Binding HasLocalBranches, Converter={StaticResource BoolToVis}}" />
-                            <ListBox ItemsSource="{Binding LocalBranches}" ItemTemplate="{StaticResource BranchTemplate}"
-                                     Style="{StaticResource RowListStyle}"
-                                     ScrollViewer.VerticalScrollBarVisibility="Disabled"
-                                     Visibility="{Binding HasLocalBranches, Converter={StaticResource BoolToVis}}">
-                                <ListBox.ContextMenu>
-                                    <ContextMenu Style="{StaticResource OwnerContextMenuStyle}">
-                                        <MenuItem Header="{Binding CopyNameText}" Click="OnCopyRefName" />
-                                    </ContextMenu>
-                                </ListBox.ContextMenu>
-                            </ListBox>
-
-                            <TextBlock Text="{Binding RemoteBranchesHeader}" Style="{StaticResource SectionHeaderStyle}"
-                                       Visibility="{Binding HasRemoteBranches, Converter={StaticResource BoolToVis}}" />
-                            <ListBox ItemsSource="{Binding RemoteBranches}"
-                                     ItemTemplate="{StaticResource BranchTemplate}"
-                                     Style="{StaticResource RowListStyle}"
-                                     ScrollViewer.VerticalScrollBarVisibility="Disabled"
-                                     Visibility="{Binding HasRemoteBranches, Converter={StaticResource BoolToVis}}">
-                                <ListBox.ContextMenu>
-                                    <ContextMenu Style="{StaticResource OwnerContextMenuStyle}">
-                                        <MenuItem Header="{Binding CopyNameText}" Click="OnCopyRefName" />
-                                    </ContextMenu>
-                                </ListBox.ContextMenu>
-                            </ListBox>
-                        </StackPanel>
-                    </ScrollViewer>
+                    <!-- 单一列表 + 分组：本地和远程共用一个选中项，
+                         不会再出现两行同时高亮。 -->
+                    <ListBox ItemsSource="{Binding BranchesView}" ItemTemplate="{StaticResource BranchTemplate}"
+                             Style="{StaticResource RowListStyle}"
+                             VirtualizingStackPanel.IsVirtualizingWhenGrouping="True"
+                             Visibility="{Binding HasAnyBranch, Converter={StaticResource BoolToVis}}">
+                        <ListBox.GroupStyle>
+                            <GroupStyle>
+                                <GroupStyle.HeaderTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding Name}"
+                                                   Style="{StaticResource SectionHeaderStyle}" />
+                                    </DataTemplate>
+                                </GroupStyle.HeaderTemplate>
+                            </GroupStyle>
+                        </ListBox.GroupStyle>
+                        <ListBox.ContextMenu>
+                            <ContextMenu Style="{StaticResource OwnerContextMenuStyle}">
+                                <MenuItem Header="{Binding CopyNameText}" Click="OnCopyRefName" />
+                            </ContextMenu>
+                        </ListBox.ContextMenu>
+                    </ListBox>
                     <TextBlock Text="{Binding EmptyBranchesText}" Style="{StaticResource EmptyTextStyle}"
                                Visibility="{Binding HasAnyBranch, Converter={StaticResource BoolToVis},
                                             ConverterParameter=invert}" />

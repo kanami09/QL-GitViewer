@@ -113,6 +113,15 @@ namespace QuickLook.Plugin.GitViewer.Git
 
         public bool HasUpstream => !string.IsNullOrEmpty(Upstream);
         public bool HasTrack => !string.IsNullOrEmpty(Track);
+
+        /// <summary>
+        ///     分支页分组显示用的标题。本地与远程合并在同一个列表里、
+        ///     靠分组分隔，而不是用两个独立列表 —— 后者的选中状态各管各的，
+        ///     会同时出现两行高亮。
+        /// </summary>
+        public string GroupLabel => Kind == GitRefKind.RemoteBranch
+            ? Translate.Get("SectionRemoteBranches", "Remote-tracking")
+            : Translate.Get("SectionLocalBranches", "Local");
     }
 
     /// <summary>一个已配置的远程仓库及其 fetch URL。</summary>

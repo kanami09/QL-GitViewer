@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
+using System.Windows.Data;
 
 namespace QuickLook.Plugin.GitViewer
 {
@@ -16,9 +17,8 @@ namespace QuickLook.Plugin.GitViewer
         private IList<GitCommitInfo> _commits = new List<GitCommitInfo>();
         private string _describe;
         private string _errorMessage;
-        private IList<GitRefInfo> _localBranches = new List<GitRefInfo>();
-        private string _remoteBranchesHeader;
-        private IList<GitRefInfo> _remoteBranches = new List<GitRefInfo>();
+        private ICollectionView _branchesView;
+        private int _branchCount;
         private IList<GitRemoteInfo> _remotes = new List<GitRemoteInfo>();
         private string _repositoryName;
         private string _repositoryPath;
@@ -36,9 +36,6 @@ namespace QuickLook.Plugin.GitViewer
             TagsHeader = Translate.Get("TabTags", "Tags");
             RemotesHeader = Translate.Get("TabRemotes", "Remotes");
 
-            LocalBranchesHeader = Translate.Get("SectionLocalBranches", "Local");
-            RemoteBranchesHeader = Translate.Get("SectionRemoteBranches", "Remote-tracking");
-
             EmptyCommitsText = Translate.Get("EmptyCommits", "No commits yet.");
             EmptyBranchesText = Translate.Get("EmptyBranches", "No branches.");
             EmptyTagsText = Translate.Get("EmptyTags", "No tags.");
@@ -54,7 +51,6 @@ namespace QuickLook.Plugin.GitViewer
         public string BranchesHeader { get; private set; }
         public string TagsHeader { get; private set; }
         public string RemotesHeader { get; private set; }
-        public string LocalBranchesHeader { get; private set; }
         public string EmptyCommitsText { get; private set; }
         public string EmptyBranchesText { get; private set; }
         public string EmptyTagsText { get; private set; }
@@ -193,38 +189,33 @@ namespace QuickLook.Plugin.GitViewer
 
         public bool HasCommits => _commits != null && _commits.Count > 0;
 
-        public IList<GitRefInfo> LocalBranches
+        /// <summary>
+        ///     本地与远程分支合并后的分组视图。用单个列表加分组，
+        ///     而不是两个独立列表 —— 后者每个都有自己的 SelectedItem，
+        ///     点完一边再点另一边会变成两行同时高亮。
+        /// </summary>
+        public ICollectionView BranchesView
         {
-            get { return _localBranches; }
-            set
-            {
-                Set(ref _localBranches, value);
-                OnPropertyChanged("HasLocalBranches");
-                OnPropertyChanged("HasAnyBranch");
-            }
+            get { return _branchesView; }
+            private set { Set(ref _branchesView, value); }
         }
 
-        public bool HasLocalBranches => _localBranches != null && _localBranches.Count > 0;
+        public bool HasAnyBranch => _branchCount > 0;
 
-        public IList<GitRefInfo> RemoteBranches
+        /// <summary>把两组分支合成一个按 GroupLabel 分组的视图。</summary>
+        public void SetBranches(IList<GitRefInfo> local, IList<GitRefInfo> remote)
         {
-            get { return _remoteBranches; }
-            set
-            {
-                Set(ref _remoteBranches, value);
-                OnPropertyChanged("HasRemoteBranches");
-                OnPropertyChanged("HasAnyBranch");
-            }
-        }
+            var all = new List<GitRefInfo>();
+            if (local != null) all.AddRange(local);
+            if (remote != null) all.AddRange(remote);
 
-        public bool HasRemoteBranches => _remoteBranches != null && _remoteBranches.Count > 0;
+            _branchCount = all.Count;
 
-        public bool HasAnyBranch => HasLocalBranches || HasRemoteBranches;
+            var view = new ListCollectionView(all);
+            view.GroupDescriptions.Add(new PropertyGroupDescription("GroupLabel"));
 
-        public string RemoteBranchesHeader
-        {
-            get { return _remoteBranchesHeader; }
-            set { Set(ref _remoteBranchesHeader, value); }
+            BranchesView = view;
+            OnPropertyChanged("HasAnyBranch");
         }
 
         public IList<GitRefInfo> Tags

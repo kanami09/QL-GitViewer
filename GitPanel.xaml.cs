@@ -77,8 +77,7 @@ namespace QuickLook.Plugin.GitViewer
         public void ApplyDetails(GitRepositoryDetails details)
         {
             _model.Commits = details.Commits;
-            _model.LocalBranches = details.LocalBranches;
-            _model.RemoteBranches = details.RemoteBranches;
+            _model.SetBranches(details.LocalBranches, details.RemoteBranches);
             _model.Tags = details.Tags;
             _model.Remotes = details.Remotes;
         }
