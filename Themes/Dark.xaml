@@ -24,6 +24,10 @@
     <SolidColorBrush x:Key="RefChipBorder" Color="#FF3C5A34" />
     <SolidColorBrush x:Key="RefChipText" Color="#FF7EE787" />
 
+    <SolidColorBrush x:Key="MenuBackground" Color="#FF2D2D2D" />
+    <SolidColorBrush x:Key="MenuBorder" Color="#FF454545" />
+    <SolidColorBrush x:Key="MenuItemHover" Color="#FF3F4A55" />
+
     <SolidColorBrush x:Key="RowHover" Color="#FF2C2C2C" />
     <SolidColorBrush x:Key="RowSelected" Color="#FF33414D" />
 

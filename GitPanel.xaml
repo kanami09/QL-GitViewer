@@ -133,11 +133,65 @@
             </Setter>
         </Style>
 
+        <!-- 菜单项。必须跟 ContextMenu 一起换掉：MenuItem 自带的前景色是黑色，
+             只把菜单背景改深会变成黑底黑字。
+             高亮用 IsHighlighted 而不是 IsMouseOver，这样键盘上下键导航也有反馈。 -->
+        <Style x:Key="FlatMenuItemStyle" TargetType="MenuItem">
+            <Setter Property="Foreground" Value="{DynamicResource PrimaryText}" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Padding" Value="14,7" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="MenuItem">
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}"
+                                Padding="{TemplateBinding Padding}"
+                                TextElement.Foreground="{TemplateBinding Foreground}"
+                                SnapsToDevicePixels="True">
+                            <ContentPresenter ContentSource="Header" VerticalAlignment="Center"
+                                              RecognizesAccessKey="True" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsHighlighted" Value="True">
+                                <Setter TargetName="Bd" Property="Background"
+                                        Value="{DynamicResource MenuItemHover}" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="Bd" Property="TextElement.Foreground"
+                                        Value="{DynamicResource MutedText}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <!-- ContextMenu 不在可视树里，不会继承 DataContext，
-             必须手动指向它所属元素的 DataContext。 -->
+             必须手动指向它所属元素的 DataContext。
+             同时要整个换掉默认模板：默认模板里有一条 28px 宽的图标栏
+             (#FFF1F1F1) 和两条 1px 竖线 (#FFE2E3E3 / #FFFFFFFF)，颜色全是写死的字面量，
+             不走 DynamicResource，所以无论什么主题都是浅色的。我们的菜单项没有图标，
+             那条图标栏只是一条白色空带，直接去掉。 -->
         <Style x:Key="OwnerContextMenuStyle" TargetType="ContextMenu">
             <Setter Property="DataContext"
                     Value="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}" />
+            <Setter Property="Background" Value="{DynamicResource MenuBackground}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource MenuBorder}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Padding" Value="0,4" />
+            <Setter Property="ItemContainerStyle" Value="{StaticResource FlatMenuItemStyle}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ContextMenu">
+                        <Border Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                Padding="{TemplateBinding Padding}"
+                                CornerRadius="4" SnapsToDevicePixels="True">
+                            <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Cycle" />
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
 
         <!-- 提交行：哈希、提交说明及 ref 小标签、作者、相对时间。 -->
