@@ -11,7 +11,6 @@
 	    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
 	    <GenerateTargetFrameworkAttribute>false</GenerateTargetFrameworkAttribute>
 	    <DebugType>full</DebugType>
-	    <CodeAnalysisRuleSet>MinimumRecommendedRules.ruleset</CodeAnalysisRuleSet>
 	    <PackageId>QuickLook.Plugin.GitViewer</PackageId>
     </PropertyGroup>
 
@@ -39,9 +38,18 @@
         <None Include="QuickLook.Plugin.Metadata.config">
             <CopyToOutputDirectory>Always</CopyToOutputDirectory>
         </None>
+        <None Include="Translations.config">
+            <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+        </None>
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="QuickLook.Common\QuickLook.Common.csproj" />
+        <!-- Private=False：QuickLook 自带 QuickLook.Common.dll。插件目录里再放一份，
+             该程序集就会被加载两次，我们实现的 IViewer 和 PluginManager 用来做
+             类型判断的 IViewer 不是同一个类型，结果就是插件能加载却永远不被识别，
+             而且没有任何报错。 -->
+        <ProjectReference Include="QuickLook.Common\QuickLook.Common.csproj">
+            <Private>False</Private>
+        </ProjectReference>
     </ItemGroup>
 </Project>
