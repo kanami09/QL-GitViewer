@@ -1,0 +1,68 @@
+name: Build & Release
+
+on:
+  push:
+    tags: ['*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # 子模块 QuickLook.Common 是 ProjectReference 的目标，不拉就构建不了。
+          submodules: recursive
+          # update-version.ps1 靠 `git describe` 取版本，浅克隆拿不到标签和提交
+          # 历史，版本号会退化成提交哈希。必须要完整历史。
+          fetch-depth: 0
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Build (Release)
+        # 必须构建 .sln 而不是 .csproj：update-version.ps1 挂在
+        # QuickLook.Common.csproj 的 PreBuildEvent 上，命令里用了 $(SolutionDir)，
+        # 直接构建 csproj 时该变量为空，脚本路径会失效。
+        run: msbuild QuickLook.Plugin.GitViewer.sln -restore -p:Configuration=Release -m
+
+      - name: Verify version
+        shell: pwsh
+        run: |
+          $config = [xml](Get-Content QuickLook.Plugin.Metadata.config)
+          $version = $config.Metadata.Version
+          Write-Host "Metadata version: $version"
+
+          if ('${{ github.ref_type }}' -eq 'tag') {
+              $tag = '${{ github.ref_name }}'
+              if ($version -ne $tag) {
+                  throw "版本号 '$version' 与标签 '$tag' 不符，git describe 没有取到该标签。"
+              }
+          }
+
+      - name: Pack
+        shell: pwsh
+        run: ./Scripts/pack-zip.ps1
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: QuickLook.Plugin.GitViewer
+          path: QuickLook.Plugin.GitViewer.qlplugin
+          if-no-files-found: error
+
+      - name: Create release
+        if: github.ref_type == 'tag'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create '${{ github.ref_name }}' `
+              QuickLook.Plugin.GitViewer.qlplugin `
+              --title '${{ github.ref_name }}' `
+              --generate-notes
