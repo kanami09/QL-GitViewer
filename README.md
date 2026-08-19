@@ -14,6 +14,7 @@
 - **概览** —— 当前分支或分离的 `HEAD`、短提交哈希、`git describe` 结果、
   相对上游的领先/落后数量、贮藏（stash）数量，以及裸仓库 / 空仓库 / 分离 HEAD 状态的徽章。
 - **提交** —— 最近 50 条提交，含哈希、提交说明、ref 装饰、作者和相对时间。
+  点击一行可以展开，看到完整的提交正文，以及这次改动的文件列表。
 - **分支** —— 本地分支与远程跟踪分支，当前分支有标记，并显示上游跟踪状态。
 - **标签** —— 标签名、所指对象和说明。
 - **远程** —— 远程名称与 fetch URL。
@@ -27,10 +28,10 @@
 - **Git for Windows** —— 本插件通过调用 `git.exe` 读取数据，而不是内置一个 git 库，
   所以预览结果始终和使用 git 命令看到的一致，包括你的配置、`.gitignore` 语义、
   worktree 和 submodule 的处理。查找 `git.exe` 的顺序是 `PATH`、`GitForWindows`
-  注册表项、常见安装目录。在找不到 `git.exe` 时，预览会失败。
+  注册表项、常见安装目录。找不到时面板会直接说明，而不是静默失败。
 
 所有 git 命令都是只读的，并且带 `--no-optional-locks`，因此预览仓库永远不会去写
-`index.lock`，不会其他 git 实例冲突。
+`index.lock`，也不会和你开着的编辑器或终端抢锁。
 
 ## 安装
 
@@ -43,7 +44,7 @@
 1. 克隆仓库，注意带上子模块：
    `git clone --recursive https://github.com/kanami09/QL-GitViewer`
 2. 用 `Release` 配置构建。
-3. 运行 `Scripts\pack-zip.ps1`，会在项目根目录生成 `QuickLook.Plugin.GitViewer.qlplugin`。
+3. 运行 `Scripts\pack-zip.ps1`，会在项目根目录生成 `QuickLook.Plugin.GitViewer-<版本号>.qlplugin`。
 
 想跳过安装器快速迭代的话，把 `bin\Release\` 的内容拷进 QuickLook 的用户插件目录再重启
 QuickLook —— 插件只在启动时扫描一次，不重启不会生效：

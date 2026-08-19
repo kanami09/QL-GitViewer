@@ -14,6 +14,7 @@ Select a repository folder, or its hidden `.git` folder, and press <kbd>Space</k
 - **Overview** — current branch or detached `HEAD`, short commit hash, `git describe`,
   ahead/behind against the upstream, stash count, and a badge for bare / empty / detached state.
 - **Commits** — the last 50 commits with hash, subject, ref decorations, author and relative time.
+  Click a row to expand it for the full commit body and the files it touched.
 - **Branches** — local and remote-tracking branches, current branch marked, upstream tracking state.
 - **Tags** — tag name, target object and message.
 - **Remotes** — remote name and fetch URL.
@@ -44,7 +45,7 @@ takes `index.lock` and never contends with an editor or terminal you have open o
 1. Clone the repository, including submodules:
    `git clone --recursive https://github.com/kanami09/QL-GitViewer`
 2. Build the `Release` configuration.
-3. Run `Scripts\pack-zip.ps1` to produce `QuickLook.Plugin.GitViewer.qlplugin`.
+3. Run `Scripts\pack-zip.ps1` to produce `QuickLook.Plugin.GitViewer-<version>.qlplugin`.
 
 To iterate without going through the installer, copy `bin\Release\` into the QuickLook user plugin
 folder and restart QuickLook — plugins are only scanned once, at startup:
