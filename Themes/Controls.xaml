@@ -84,6 +84,11 @@
     <Style x:Key="RowListStyle" TargetType="ListBox">
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="BorderThickness" Value="0" />
+        <!-- 右侧留白。QuickLook 全局的 ScrollBar 样式宽 13px 且占布局，
+             不留这道缝的话行尾内容会紧贴滚动条，看着像被压住了。
+             ListBox 的 Padding 只作用于 ScrollViewer 的内容区，滚动条在它外面，
+             所以这里加的是内容与滚动条之间的间距，不会把滚动条挤走。 -->
+        <Setter Property="Padding" Value="0,0,13,0" />
         <Setter Property="ItemContainerStyle" Value="{StaticResource RowItemStyle}" />
         <!-- 这个属性默认是 null，含义为"ItemsSource 本身是 ICollectionView 时按 true 处理"。
              分支页绑的正是 ListCollectionView，于是列表会去跟它的 CurrentItem 同步，
