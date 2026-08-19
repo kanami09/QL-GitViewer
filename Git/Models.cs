@@ -1,6 +1,7 @@
 ﻿using QuickLook.Plugin.GitViewer.Helpers;
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 
 namespace QuickLook.Plugin.GitViewer.Git
 {
@@ -102,6 +103,38 @@ namespace QuickLook.Plugin.GitViewer.Git
 
         /// <summary>raw 输出里的原始状态字段，例如 "M"、"R095"。</summary>
         public string Status { get; set; }
+
+        /// <summary>
+        ///     只取状态首字母。重命名和复制的原始状态带相似度数字（R095、C100），
+        ///     整个显示出来会占掉一大截宽度，那个数字放进 ToolTip 就够了。
+        /// </summary>
+        public string StatusLetter => string.IsNullOrEmpty(Status)
+            ? string.Empty
+            : Status.Substring(0, 1);
+
+        /// <summary>
+        ///     重命名或复制的相似度百分比，来自 R/C 后面那串数字；其余状态为 0。
+        /// </summary>
+        public int SimilarityPercent
+        {
+            get
+            {
+                if (string.IsNullOrEmpty(Status) || Status.Length < 2)
+                    return 0;
+
+                int value;
+                return int.TryParse(Status.Substring(1), NumberStyles.Integer, CultureInfo.InvariantCulture,
+                    out value)
+                    ? value
+                    : 0;
+            }
+        }
+
+        /// <summary>
+        ///     状态字母的悬停说明，由 <see cref="CommitViewModel.ApplyFiles" /> 填入。
+        ///     和 <see cref="GitRefInfo.GroupLabel" /> 一样：文案是界面的事，模型不碰翻译。
+        /// </summary>
+        public string StatusTooltip { get; set; }
 
         public string Path { get; set; }
 

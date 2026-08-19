@@ -1,4 +1,4 @@
-<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+﻿<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
     <!-- 各个页签的行模板。
@@ -13,20 +13,22 @@
         <ResourceDictionary Source="pack://application:,,,/QuickLook.Plugin.GitViewer;component/Themes/Controls.xaml" />
     </ResourceDictionary.MergedDictionaries>
 
-    <!-- 单个改动文件：状态字母、路径（重命名显示"旧 → 新"）、增删行数。 -->
+    <!-- 单个改动文件。
+         增删行数放在路径左边而不是行尾：行尾的话文件一多，数字和文件名之间隔着
+         一大片空白，很容易看错行；放左边则始终紧邻状态字母，且各行天然对齐。 -->
     <DataTemplate x:Key="FileChangeTemplate">
         <Grid Margin="0,1">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="18" />
+                <ColumnDefinition Width="14" />
+                <ColumnDefinition Width="40" />
+                <ColumnDefinition Width="40" />
                 <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
 
-            <!-- 状态字母的颜色跟着 Kind 走，用触发器实现，不额外引入转换器。 -->
-            <TextBlock Grid.Column="0" Text="{Binding Status}" FontFamily="{StaticResource MonoFont}"
-                       FontSize="11" VerticalAlignment="Center" ToolTip="{Binding Status}"
-                       TextTrimming="None">
+            <!-- 只显示首字母；R095 那个相似度数字在 ToolTip 里。
+                 颜色跟着 Kind 走，用触发器实现，不额外引入转换器。 -->
+            <TextBlock Grid.Column="0" Text="{Binding StatusLetter}" FontFamily="{StaticResource MonoFont}"
+                       FontSize="11" VerticalAlignment="Center" ToolTip="{Binding StatusTooltip}">
                 <TextBlock.Style>
                     <Style TargetType="TextBlock">
                         <Setter Property="Foreground" Value="{DynamicResource DiffNeutral}" />
@@ -45,9 +47,49 @@
                 </TextBlock.Style>
             </TextBlock>
 
+            <!-- 为 0 时压暗，让眼睛直接跳过。 -->
+            <TextBlock Grid.Column="1" FontSize="11" FontFamily="{StaticResource MonoFont}"
+                       VerticalAlignment="Center" Margin="0,0,6,0" TextAlignment="Right"
+                       Text="{Binding Added, StringFormat=+{0}}"
+                       Visibility="{Binding IsBinary, Converter={StaticResource BoolToVis},
+                                    ConverterParameter=invert}">
+                <TextBlock.Style>
+                    <Style TargetType="TextBlock">
+                        <Setter Property="Foreground" Value="{DynamicResource DiffAdded}" />
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding Added}" Value="0">
+                                <Setter Property="Foreground" Value="{DynamicResource DiffNeutral}" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </TextBlock.Style>
+            </TextBlock>
+
+            <TextBlock Grid.Column="2" FontSize="11" FontFamily="{StaticResource MonoFont}"
+                       VerticalAlignment="Center" Margin="0,0,10,0" TextAlignment="Right"
+                       Text="{Binding Deleted, StringFormat=-{0}}"
+                       Visibility="{Binding IsBinary, Converter={StaticResource BoolToVis},
+                                    ConverterParameter=invert}">
+                <TextBlock.Style>
+                    <Style TargetType="TextBlock">
+                        <Setter Property="Foreground" Value="{DynamicResource DiffDeleted}" />
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding Deleted}" Value="0">
+                                <Setter Property="Foreground" Value="{DynamicResource DiffNeutral}" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </TextBlock.Style>
+            </TextBlock>
+
+            <TextBlock Grid.Column="1" Grid.ColumnSpan="2" Text="bin" FontSize="11"
+                       FontFamily="{StaticResource MonoFont}" Foreground="{DynamicResource MutedText}"
+                       VerticalAlignment="Center" Margin="0,0,10,0" TextAlignment="Right"
+                       Visibility="{Binding IsBinary, Converter={StaticResource BoolToVis}}" />
+
             <!-- 用嵌套 Grid 而不是横向 StackPanel：StackPanel 给子元素无限宽度，
                  长路径的省略号就不会生效。 -->
-            <Grid Grid.Column="1">
+            <Grid Grid.Column="3">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="*" />
@@ -56,32 +98,13 @@
                 <!-- 间距用 Margin 而不是格式串里的尾随空格：标记扩展会把尾随空格裁掉。 -->
                 <TextBlock Grid.Column="0" Text="{Binding OldPath, StringFormat={}{0} →}"
                            Foreground="{DynamicResource MutedText}" FontSize="11" Margin="0,0,5,0"
-                           VerticalAlignment="Center" TextTrimming="CharacterEllipsis" MaxWidth="200"
+                           VerticalAlignment="Center" TextTrimming="CharacterEllipsis" MaxWidth="220"
                            Visibility="{Binding HasOldPath, Converter={StaticResource BoolToVis}}" />
 
                 <TextBlock Grid.Column="1" Text="{Binding Path}" Foreground="{DynamicResource SecondaryText}"
                            FontSize="11" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
                            ToolTip="{Binding Path}" />
             </Grid>
-
-            <TextBlock Grid.Column="2" Foreground="{DynamicResource DiffAdded}" FontSize="11"
-                       FontFamily="{StaticResource MonoFont}" VerticalAlignment="Center"
-                       Margin="8,0,0,0" MinWidth="34" TextAlignment="Right"
-                       Text="{Binding Added, StringFormat=+{0}}"
-                       Visibility="{Binding IsBinary, Converter={StaticResource BoolToVis},
-                                    ConverterParameter=invert}" />
-
-            <TextBlock Grid.Column="3" Foreground="{DynamicResource DiffDeleted}" FontSize="11"
-                       FontFamily="{StaticResource MonoFont}" VerticalAlignment="Center"
-                       Margin="6,0,0,0" MinWidth="34" TextAlignment="Right"
-                       Text="{Binding Deleted, StringFormat=-{0}}"
-                       Visibility="{Binding IsBinary, Converter={StaticResource BoolToVis},
-                                    ConverterParameter=invert}" />
-
-            <TextBlock Grid.Column="2" Grid.ColumnSpan="2" Text="bin" FontSize="11"
-                       Foreground="{DynamicResource MutedText}" VerticalAlignment="Center"
-                       Margin="8,0,0,0" TextAlignment="Right"
-                       Visibility="{Binding IsBinary, Converter={StaticResource BoolToVis}}" />
         </Grid>
     </DataTemplate>
 
@@ -93,7 +116,7 @@
             <!-- 摘要行。Background 必须给 Transparent，否则空白处不参与命中测试，
                  点在两列之间的空隙上不会展开。名字被 GitPanel.xaml.cs 用来判断
                  点击是不是来自详情区，改名要同步那边。 -->
-            <Grid x:Name="CommitSummary" Margin="10,5" Background="Transparent">
+            <Grid x:Name="CommitSummary" Margin="10,5,6,5" Background="Transparent">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="Auto" />
@@ -150,7 +173,7 @@
             </Grid>
 
             <!-- 详情区。名字被 GitPanel.xaml.cs 用来判断点击来源：点这里面不该收起整行。 -->
-            <StackPanel x:Name="CommitDetail" Margin="34,0,12,10"
+            <StackPanel x:Name="CommitDetail" Margin="34,0,6,10"
                         Visibility="{Binding IsExpanded, Converter={StaticResource BoolToVis}}">
                 <TextBlock Text="{Binding Body}" Foreground="{DynamicResource SecondaryText}"
                            FontSize="12" TextWrapping="Wrap" Margin="0,0,0,8"

@@ -26,6 +26,16 @@ namespace QuickLook.Plugin.GitViewer.ViewModels
         private static readonly string LoadFailedText = Translate.Get("DetailLoadFailed",
             "Could not read the changes for this commit.");
 
+        private static readonly string StatusAddedText = Translate.Get("StatusAdded", "Added");
+        private static readonly string StatusModifiedText = Translate.Get("StatusModified", "Modified");
+        private static readonly string StatusDeletedText = Translate.Get("StatusDeleted", "Deleted");
+        private static readonly string StatusRenamedText = Translate.Get("StatusRenamed", "Renamed");
+        private static readonly string StatusCopiedText = Translate.Get("StatusCopied", "Copied");
+        private static readonly string StatusTypeChangedText = Translate.Get("StatusTypeChanged", "Type changed");
+        private static readonly string StatusUnknownText = Translate.Get("StatusUnknown", "Unknown");
+        private static readonly string StatusSimilarityFormat = Translate.Get("StatusSimilarity",
+            "{0} ({1}% similar)");
+
         private readonly GitCommitInfo _info;
         private readonly CommitFilesLoader _loader;
 
@@ -131,8 +141,37 @@ namespace QuickLook.Plugin.GitViewer.ViewModels
         {
             IsLoadingFiles = false;
             _filesLoaded = true;
-            Files = files ?? new List<GitFileChange>();
+
+            var list = files ?? new List<GitFileChange>();
+            foreach (var change in list)
+                change.StatusTooltip = DescribeStatus(change);
+
+            Files = list;
             OnPropertyChanged("HasNoChanges");
+        }
+
+        /// <summary>
+        ///     把状态字母翻成人话。重命名和复制带上相似度，
+        ///     比如"重命名（95% 相似）"—— 原始的 "R095" 对不熟这套字母的人等于没说。
+        /// </summary>
+        private static string DescribeStatus(GitFileChange change)
+        {
+            string name;
+
+            switch (change.Kind)
+            {
+                case GitFileChangeKind.Added: name = StatusAddedText; break;
+                case GitFileChangeKind.Modified: name = StatusModifiedText; break;
+                case GitFileChangeKind.Deleted: name = StatusDeletedText; break;
+                case GitFileChangeKind.Renamed: name = StatusRenamedText; break;
+                case GitFileChangeKind.Copied: name = StatusCopiedText; break;
+                case GitFileChangeKind.TypeChanged: name = StatusTypeChangedText; break;
+                default: name = StatusUnknownText; break;
+            }
+
+            return change.SimilarityPercent > 0
+                ? string.Format(StatusSimilarityFormat, name, change.SimilarityPercent)
+                : name;
         }
 
         /// <summary>加载失败。必须在 UI 线程上调用。</summary>
