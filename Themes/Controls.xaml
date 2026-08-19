@@ -85,6 +85,11 @@
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="BorderThickness" Value="0" />
         <Setter Property="ItemContainerStyle" Value="{StaticResource RowItemStyle}" />
+        <!-- 这个属性默认是 null，含义为"ItemsSource 本身是 ICollectionView 时按 true 处理"。
+             分支页绑的正是 ListCollectionView，于是列表会去跟它的 CurrentItem 同步，
+             一切换过去第一行就自动选中了。其余三页绑的是普通 IList，不受影响。
+             我们没有任何地方用到 CurrentItem，直接关掉。 -->
+        <Setter Property="IsSynchronizedWithCurrentItem" Value="False" />
         <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled" />
         <Setter Property="VirtualizingStackPanel.IsVirtualizing" Value="True" />
         <Setter Property="VirtualizingStackPanel.VirtualizationMode" Value="Recycling" />
