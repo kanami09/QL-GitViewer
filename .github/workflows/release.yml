@@ -46,14 +46,15 @@ jobs:
           }
 
       - name: Pack
+        id: pack
         shell: pwsh
         run: ./Scripts/pack-zip.ps1
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: QuickLook.Plugin.GitViewer
-          path: QuickLook.Plugin.GitViewer.qlplugin
+          name: QuickLook.Plugin.GitViewer-${{ steps.pack.outputs.version }}
+          path: ${{ steps.pack.outputs.plugin }}
           if-no-files-found: error
 
       - name: Create release
@@ -63,6 +64,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create '${{ github.ref_name }}' `
-              QuickLook.Plugin.GitViewer.qlplugin `
+              '${{ steps.pack.outputs.plugin }}' `
               --title '${{ github.ref_name }}' `
               --generate-notes
