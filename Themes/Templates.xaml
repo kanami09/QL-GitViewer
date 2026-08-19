@@ -125,14 +125,17 @@
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
 
-                <!-- 纯指示符，不是按钮：整行都可以点。 -->
-                <TextBlock Grid.Column="0" Text="&#x25B8;" FontSize="10" Margin="0,0,6,0"
-                           VerticalAlignment="Center" Foreground="{DynamicResource MutedText}">
+                <!-- 纯指示符，不是按钮：整行都可以点。
+                     收起和展开两个字形都必须由 Style 给：直接写在标签上的 Text 是局部值，
+                     优先级高于 Style 触发器里的 Setter，触发器再也换不动它。 -->
+                <TextBlock Grid.Column="0" FontSize="10" Margin="0,0,6,0"
+                           VerticalAlignment="Center" Foreground="{DynamicResource SecondaryText}">
                     <TextBlock.Style>
                         <Style TargetType="TextBlock">
+                            <Setter Property="Text" Value="&#x25B6;" />
                             <Style.Triggers>
                                 <DataTrigger Binding="{Binding IsExpanded}" Value="True">
-                                    <Setter Property="Text" Value="&#x25BE;" />
+                                    <Setter Property="Text" Value="&#x25BC;" />
                                 </DataTrigger>
                             </Style.Triggers>
                         </Style>
