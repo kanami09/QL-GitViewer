@@ -138,7 +138,9 @@ namespace QuickLook.Plugin.GitViewer.Git
         {
             var commits = new List<GitCommitInfo>();
 
-            const string format = "--pretty=format:%H%x1f%h%x1f%an%x1f%ae%x1f%aI%x1f%D%x1f%s%x1e";
+            // %b 放在最后：它可以包含任意字符（含换行），而记录之间靠 %x1e 分隔，
+            // 所以多行正文不会破坏解析。
+            const string format = "--pretty=format:%H%x1f%h%x1f%an%x1f%ae%x1f%aI%x1f%D%x1f%s%x1f%P%x1f%b%x1e";
             var result = _runner.Run(ct, "log", "-n", CommitLimit.ToString(CultureInfo.InvariantCulture),
                 "--no-color", format);
 
@@ -152,7 +154,7 @@ namespace QuickLook.Plugin.GitViewer.Git
                     continue;
 
                 var f = trimmed.Split(FieldSeparator);
-                if (f.Length < 7)
+                if (f.Length < 9)
                     continue;
 
                 commits.Add(new GitCommitInfo
@@ -163,11 +165,138 @@ namespace QuickLook.Plugin.GitViewer.Git
                     AuthorEmail = f[3],
                     When = ParseDate(f[4]),
                     Decorations = f[5],
-                    Subject = f[6]
+                    Subject = f[6],
+                    ParentCount = CountParents(f[7]),
+                    // %b 末尾总带一个换行，不去掉的话展开后正文下面会多出一片空白。
+                    Body = f[8].TrimEnd('\r', '\n')
                 });
             }
 
             return commits;
+        }
+
+        /// <summary>
+        ///     读取单个提交的文件改动，供展开某一行时惰性调用。
+        ///     <para>
+        ///     实测：<c>--numstat</c> 与 <c>--name-status</c> 同时给的话后者会覆盖前者，
+        ///     两样拿不齐。<c>--raw</c> 与 <c>--numstat</c> 同时给才行 —— git 会先后输出
+        ///     两个块，文件顺序一致。状态和路径取自 raw 块（重命名的新旧路径是两个独立
+        ///     字段，干净），增删行数取自 numstat 块（那里的重命名路径被压缩成
+        ///     "{a =&gt; b}" 形式，不适合用来取路径）。
+        ///     </para>
+        /// </summary>
+        /// <returns>
+        ///     文件改动列表；命令失败时返回 null，好和"这个提交确实没有改动"区分开。
+        /// </returns>
+        public List<GitFileChange> ReadCommitFiles(string hash, CancellationToken ct)
+        {
+            var result = _runner.Run(ct, "show", "--no-color", "--format=", "--raw", "--numstat",
+                "--find-renames", hash);
+
+            if (!result.Success)
+                return null;
+
+            var changes = new List<GitFileChange>();
+
+            // null 表示"这一项是二进制文件，没有行数"。二进制项也必须占一个位置，
+            // 否则它后面所有文件的行数都会串到上一行去。
+            var counts = new List<int[]>();
+
+            foreach (var line in SplitLines(result.StdOut))
+            {
+                if (line[0] == ':')
+                {
+                    var change = ParseRawLine(line);
+                    if (change != null)
+                        changes.Add(change);
+
+                    continue;
+                }
+
+                var tabs = line.Split('\t');
+                if (tabs.Length < 3)
+                    continue;
+
+                counts.Add(tabs[0] == "-" || tabs[1] == "-"
+                    ? null
+                    : new[] { ParseInt(tabs[0]), ParseInt(tabs[1]) });
+            }
+
+            // 两个块理应一一对应。数目对不上就只保留状态和路径，行数留 0 ——
+            // 宁可少显示一点，也不能让一次解析意外把整个展开搞崩。
+            if (counts.Count == changes.Count)
+                for (var i = 0; i < changes.Count; i++)
+                {
+                    if (counts[i] == null)
+                    {
+                        changes[i].IsBinary = true;
+                        continue;
+                    }
+
+                    changes[i].Added = counts[i][0];
+                    changes[i].Deleted = counts[i][1];
+                }
+
+            return changes;
+        }
+
+        /// <summary>
+        ///     解析一行 raw 输出：<c>:100644 100644 aaa bbb R095\t旧路径\t新路径</c>。
+        ///     前面那段用空格分隔，最后一个空格分隔字段是状态，其后全部按制表符分隔。
+        /// </summary>
+        private static GitFileChange ParseRawLine(string line)
+        {
+            var tabs = line.Split('\t');
+            if (tabs.Length < 2)
+                return null;
+
+            var head = tabs[0].Split(' ');
+            var status = head[head.Length - 1];
+            if (status.Length == 0)
+                return null;
+
+            var change = new GitFileChange
+            {
+                Status = status,
+                Kind = ToChangeKind(status[0])
+            };
+
+            // 重命名和复制带两个路径，其余只有一个。
+            if ((change.Kind == GitFileChangeKind.Renamed || change.Kind == GitFileChangeKind.Copied)
+                && tabs.Length >= 3)
+            {
+                change.OldPath = tabs[1];
+                change.Path = tabs[2];
+            }
+            else
+            {
+                change.Path = tabs[1];
+            }
+
+            return change;
+        }
+
+        private static GitFileChangeKind ToChangeKind(char status)
+        {
+            switch (status)
+            {
+                case 'A': return GitFileChangeKind.Added;
+                case 'M': return GitFileChangeKind.Modified;
+                case 'D': return GitFileChangeKind.Deleted;
+                case 'R': return GitFileChangeKind.Renamed;
+                case 'C': return GitFileChangeKind.Copied;
+                case 'T': return GitFileChangeKind.TypeChanged;
+                default: return GitFileChangeKind.Unknown;
+            }
+        }
+
+        /// <summary>%P 是空格分隔的父提交哈希；数出来大于 1 即合并提交。</summary>
+        private static int CountParents(string value)
+        {
+            if (string.IsNullOrEmpty(value))
+                return 0;
+
+            return value.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries).Length;
         }
 
         private List<GitRefInfo> ReadRefs(CancellationToken ct)

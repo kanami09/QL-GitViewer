@@ -81,6 +81,7 @@
                     <ListBox ItemsSource="{Binding Commits}" ItemTemplate="{StaticResource CommitTemplate}"
                              Style="{StaticResource RowListStyle}"
                              PreviewMouseRightButtonDown="OnRowRightButtonDown"
+                             PreviewMouseLeftButtonUp="OnCommitRowClick"
                              Visibility="{Binding HasCommits, Converter={StaticResource BoolToVis}}">
                         <ListBox.ContextMenu>
                             <ContextMenu Style="{StaticResource OwnerContextMenuStyle}">

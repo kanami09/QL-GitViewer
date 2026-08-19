@@ -93,6 +93,8 @@
         <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled" />
         <Setter Property="VirtualizingStackPanel.IsVirtualizing" Value="True" />
         <Setter Property="VirtualizingStackPanel.VirtualizationMode" Value="Recycling" />
+        <!-- 提交行展开后行高不再等高，默认的 Item 滚动单位会一格一格地跳。 -->
+        <Setter Property="VirtualizingPanel.ScrollUnit" Value="Pixel" />
     </Style>
 
     <!-- TabControl 自带的外观写死了浅灰色，不换掉的话深色主题下会很突兀。 -->

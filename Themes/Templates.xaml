@@ -13,48 +13,167 @@
         <ResourceDictionary Source="pack://application:,,,/QuickLook.Plugin.GitViewer;component/Themes/Controls.xaml" />
     </ResourceDictionary.MergedDictionaries>
 
-    <!-- 提交行：哈希、提交说明及 ref 小标签、作者、相对时间。 -->
-    <DataTemplate x:Key="CommitTemplate">
-        <Grid Margin="10,5">
+    <!-- 单个改动文件：状态字母、路径（重命名显示"旧 → 新"）、增删行数。 -->
+    <DataTemplate x:Key="FileChangeTemplate">
+        <Grid Margin="0,1">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="18" />
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
 
-            <TextBlock Grid.Column="0" Text="{Binding ShortHash}" Style="{StaticResource HashTextStyle}"
-                       Margin="0,0,10,0" ToolTip="{Binding Hash}" />
+            <!-- 状态字母的颜色跟着 Kind 走，用触发器实现，不额外引入转换器。 -->
+            <TextBlock Grid.Column="0" Text="{Binding Status}" FontFamily="{StaticResource MonoFont}"
+                       FontSize="11" VerticalAlignment="Center" ToolTip="{Binding Status}"
+                       TextTrimming="None">
+                <TextBlock.Style>
+                    <Style TargetType="TextBlock">
+                        <Setter Property="Foreground" Value="{DynamicResource DiffNeutral}" />
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding Kind}" Value="Added">
+                                <Setter Property="Foreground" Value="{DynamicResource DiffAdded}" />
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding Kind}" Value="Deleted">
+                                <Setter Property="Foreground" Value="{DynamicResource DiffDeleted}" />
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding Kind}" Value="Renamed">
+                                <Setter Property="Foreground" Value="{DynamicResource Accent}" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </TextBlock.Style>
+            </TextBlock>
 
-            <StackPanel Grid.Column="1" Orientation="Vertical" VerticalAlignment="Center">
-                <TextBlock Text="{Binding Subject}" Foreground="{DynamicResource PrimaryText}"
-                           TextTrimming="CharacterEllipsis" ToolTip="{Binding Subject}" />
-                <ItemsControl ItemsSource="{Binding DecorationList}" Margin="0,2,0,0"
-                              Visibility="{Binding HasDecorations, Converter={StaticResource BoolToVis}}">
-                    <ItemsControl.ItemsPanel>
-                        <ItemsPanelTemplate>
-                            <WrapPanel />
-                        </ItemsPanelTemplate>
-                    </ItemsControl.ItemsPanel>
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate>
-                            <Border Style="{StaticResource RefChipBorderStyle}">
-                                <TextBlock Text="{Binding}" Foreground="{DynamicResource RefChipText}"
-                                           FontSize="11" />
-                            </Border>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
-            </StackPanel>
+            <!-- 用嵌套 Grid 而不是横向 StackPanel：StackPanel 给子元素无限宽度，
+                 长路径的省略号就不会生效。 -->
+            <Grid Grid.Column="1">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
 
-            <TextBlock Grid.Column="2" Text="{Binding AuthorName}" Foreground="{DynamicResource SecondaryText}"
-                       Margin="12,0,12,0" VerticalAlignment="Center" MaxWidth="140"
-                       TextTrimming="CharacterEllipsis" ToolTip="{Binding AuthorTooltip}" />
+                <!-- 间距用 Margin 而不是格式串里的尾随空格：标记扩展会把尾随空格裁掉。 -->
+                <TextBlock Grid.Column="0" Text="{Binding OldPath, StringFormat={}{0} →}"
+                           Foreground="{DynamicResource MutedText}" FontSize="11" Margin="0,0,5,0"
+                           VerticalAlignment="Center" TextTrimming="CharacterEllipsis" MaxWidth="200"
+                           Visibility="{Binding HasOldPath, Converter={StaticResource BoolToVis}}" />
 
-            <TextBlock Grid.Column="3" Text="{Binding RelativeTime}" Foreground="{DynamicResource MutedText}"
-                       VerticalAlignment="Center" MinWidth="88" TextAlignment="Right"
-                       ToolTip="{Binding AbsoluteTime}" />
+                <TextBlock Grid.Column="1" Text="{Binding Path}" Foreground="{DynamicResource SecondaryText}"
+                           FontSize="11" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                           ToolTip="{Binding Path}" />
+            </Grid>
+
+            <TextBlock Grid.Column="2" Foreground="{DynamicResource DiffAdded}" FontSize="11"
+                       FontFamily="{StaticResource MonoFont}" VerticalAlignment="Center"
+                       Margin="8,0,0,0" MinWidth="34" TextAlignment="Right"
+                       Text="{Binding Added, StringFormat=+{0}}"
+                       Visibility="{Binding IsBinary, Converter={StaticResource BoolToVis},
+                                    ConverterParameter=invert}" />
+
+            <TextBlock Grid.Column="3" Foreground="{DynamicResource DiffDeleted}" FontSize="11"
+                       FontFamily="{StaticResource MonoFont}" VerticalAlignment="Center"
+                       Margin="6,0,0,0" MinWidth="34" TextAlignment="Right"
+                       Text="{Binding Deleted, StringFormat=-{0}}"
+                       Visibility="{Binding IsBinary, Converter={StaticResource BoolToVis},
+                                    ConverterParameter=invert}" />
+
+            <TextBlock Grid.Column="2" Grid.ColumnSpan="2" Text="bin" FontSize="11"
+                       Foreground="{DynamicResource MutedText}" VerticalAlignment="Center"
+                       Margin="8,0,0,0" TextAlignment="Right"
+                       Visibility="{Binding IsBinary, Converter={StaticResource BoolToVis}}" />
         </Grid>
+    </DataTemplate>
+
+    <!-- 提交行：摘要一行，展开后在下面接一块详情。
+         展开状态存在 CommitViewModel 上，不在容器上 —— 列表开了容器回收，
+         状态存容器会导致滚动后展开的是别的行。 -->
+    <DataTemplate x:Key="CommitTemplate">
+        <StackPanel>
+            <!-- 摘要行。Background 必须给 Transparent，否则空白处不参与命中测试，
+                 点在两列之间的空隙上不会展开。名字被 GitPanel.xaml.cs 用来判断
+                 点击是不是来自详情区，改名要同步那边。 -->
+            <Grid x:Name="CommitSummary" Margin="10,5" Background="Transparent">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <!-- 纯指示符，不是按钮：整行都可以点。 -->
+                <TextBlock Grid.Column="0" Text="&#x25B8;" FontSize="10" Margin="0,0,6,0"
+                           VerticalAlignment="Center" Foreground="{DynamicResource MutedText}">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsExpanded}" Value="True">
+                                    <Setter Property="Text" Value="&#x25BE;" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
+
+                <TextBlock Grid.Column="1" Text="{Binding ShortHash}" Style="{StaticResource HashTextStyle}"
+                           Margin="0,0,10,0" ToolTip="{Binding Hash}" />
+
+                <StackPanel Grid.Column="2" Orientation="Vertical" VerticalAlignment="Center">
+                    <TextBlock Text="{Binding Subject}" Foreground="{DynamicResource PrimaryText}"
+                               TextTrimming="CharacterEllipsis" ToolTip="{Binding Subject}" />
+                    <ItemsControl ItemsSource="{Binding DecorationList}" Margin="0,2,0,0"
+                                  Visibility="{Binding HasDecorations, Converter={StaticResource BoolToVis}}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <WrapPanel />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Style="{StaticResource RefChipBorderStyle}">
+                                    <TextBlock Text="{Binding}" Foreground="{DynamicResource RefChipText}"
+                                               FontSize="11" />
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+
+                <TextBlock Grid.Column="3" Text="{Binding AuthorName}" Foreground="{DynamicResource SecondaryText}"
+                           Margin="12,0,12,0" VerticalAlignment="Center" MaxWidth="140"
+                           TextTrimming="CharacterEllipsis" ToolTip="{Binding AuthorTooltip}" />
+
+                <TextBlock Grid.Column="4" Text="{Binding RelativeTime}" Foreground="{DynamicResource MutedText}"
+                           VerticalAlignment="Center" MinWidth="88" TextAlignment="Right"
+                           ToolTip="{Binding AbsoluteTime}" />
+            </Grid>
+
+            <!-- 详情区。名字被 GitPanel.xaml.cs 用来判断点击来源：点这里面不该收起整行。 -->
+            <StackPanel x:Name="CommitDetail" Margin="34,0,12,10"
+                        Visibility="{Binding IsExpanded, Converter={StaticResource BoolToVis}}">
+                <TextBlock Text="{Binding Body}" Foreground="{DynamicResource SecondaryText}"
+                           FontSize="12" TextWrapping="Wrap" Margin="0,0,0,8"
+                           Visibility="{Binding HasBody, Converter={StaticResource BoolToVis}}" />
+
+                <TextBlock Text="{Binding LoadingLabel}" Foreground="{DynamicResource MutedText}" FontSize="11"
+                           Visibility="{Binding IsLoadingFiles, Converter={StaticResource BoolToVis}}" />
+
+                <TextBlock Text="{Binding MergeLabel}" Foreground="{DynamicResource MutedText}" FontSize="11"
+                           TextWrapping="Wrap"
+                           Visibility="{Binding IsMerge, Converter={StaticResource BoolToVis}}" />
+
+                <TextBlock Text="{Binding NoChangesLabel}" Foreground="{DynamicResource MutedText}" FontSize="11"
+                           Visibility="{Binding HasNoChanges, Converter={StaticResource BoolToVis}}" />
+
+                <TextBlock Text="{Binding LoadFailedLabel}" Foreground="{DynamicResource ErrorText}" FontSize="11"
+                           TextWrapping="Wrap"
+                           Visibility="{Binding LoadFailed, Converter={StaticResource BoolToVis}}" />
+
+                <ItemsControl ItemsSource="{Binding Files}" ItemTemplate="{StaticResource FileChangeTemplate}"
+                              Visibility="{Binding HasFiles, Converter={StaticResource BoolToVis}}" />
+            </StackPanel>
+        </StackPanel>
     </DataTemplate>
 
     <!-- 分支行：名称、跟踪状态、最新提交哈希、说明、相对时间。 -->

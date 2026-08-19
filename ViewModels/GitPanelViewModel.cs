@@ -2,20 +2,19 @@
 using QuickLook.Plugin.GitViewer.Helpers;
 using System.Collections.Generic;
 using System.ComponentModel;
-using System.Runtime.CompilerServices;
 using System.Windows.Data;
 
-namespace QuickLook.Plugin.GitViewer
+namespace QuickLook.Plugin.GitViewer.ViewModels
 {
     /// <summary>
     ///     <see cref="GitPanel" /> 的数据源。分两步在 UI 线程上填充：
     ///     先填头部概览，等明细查询返回后再填各个页签的内容。
     /// </summary>
-    public sealed class GitPanelViewModel : INotifyPropertyChanged
+    public sealed class GitPanelViewModel : ObservableObject
     {
         private string _badgeText;
         private string _branchLabel;
-        private IList<GitCommitInfo> _commits = new List<GitCommitInfo>();
+        private IList<CommitViewModel> _commits = new List<CommitViewModel>();
         private string _describe;
         private string _errorMessage;
         private ICollectionView _branchesView;
@@ -178,7 +177,7 @@ namespace QuickLook.Plugin.GitViewer
 
         public bool HasToast => !string.IsNullOrEmpty(_toastText);
 
-        public IList<GitCommitInfo> Commits
+        public IList<CommitViewModel> Commits
         {
             get { return _commits; }
             set
@@ -282,10 +281,21 @@ namespace QuickLook.Plugin.GitViewer
                     info.StashCount);
         }
 
+        /// <summary>
+        ///     展开某条提交时用来惰性读取文件改动。由 <see cref="Plugin" /> 在创建
+        ///     runner 之后装配，必须早于 <see cref="ApplyDetails" />。
+        /// </summary>
+        public CommitFilesLoader FilesLoader { get; set; }
+
         /// <summary>填充各个页签。加载的第二阶段返回时调用。</summary>
         public void ApplyDetails(GitRepositoryDetails details)
         {
-            Commits = details.Commits;
+            var commits = new List<CommitViewModel>();
+            if (details.Commits != null)
+                foreach (var commit in details.Commits)
+                    commits.Add(new CommitViewModel(commit, FilesLoader));
+
+            Commits = commits;
             SetBranches(details.LocalBranches, details.RemoteBranches);
             Tags = details.Tags;
             Remotes = details.Remotes;
@@ -337,19 +347,5 @@ namespace QuickLook.Plugin.GitViewer
             return string.Empty;
         }
 
-        public event PropertyChangedEventHandler PropertyChanged;
-
-        private void Set<T>(ref T field, T value, [CallerMemberName] string propertyName = null)
-        {
-            field = value;
-            OnPropertyChanged(propertyName);
-        }
-
-        private void OnPropertyChanged(string propertyName)
-        {
-            var handler = PropertyChanged;
-            if (handler != null)
-                handler(this, new PropertyChangedEventArgs(propertyName));
-        }
     }
 }

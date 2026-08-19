@@ -2,6 +2,7 @@
 using QuickLook.Common.Plugin;
 using QuickLook.Plugin.GitViewer.Git;
 using QuickLook.Plugin.GitViewer.Helpers;
+using QuickLook.Plugin.GitViewer.ViewModels;
 using System;
 using System.Globalization;
 using System.Threading;
@@ -76,6 +77,11 @@ namespace QuickLook.Plugin.GitViewer
 
             var runner = _runner;
             var token = _cts.Token;
+            var reader = new GitRepositoryReader(runner);
+
+            // 展开某条提交时才去读它的文件改动。必须在 ApplyDetails 之前装好，
+            // 因为提交行是在那里包出来的，装配晚了它们就拿不到加载器。
+            panel.Model.FilesLoader = commit => Task.Run(() => LoadFiles(commit, panel, reader, token));
 
             Task.Run(() => Load(location, context, panel, runner, token));
         }
@@ -144,6 +150,38 @@ namespace QuickLook.Plugin.GitViewer
                                                + Environment.NewLine + e.Message;
                     context.IsBusy = false;
                 });
+            }
+        }
+
+        /// <summary>
+        ///     读取单条提交的文件改动。展开提交行时由视图模型经 FilesLoader 触发。
+        ///     <para>
+        ///     预览关掉之后再走到这里是安全的：GitCommandRunner 一旦 Dispose，
+        ///     Run 会直接返回失败，而 Marshal 又会在派发前后各查一次取消标记。
+        ///     </para>
+        /// </summary>
+        private static void LoadFiles(CommitViewModel commit, GitPanel panel, GitRepositoryReader reader,
+            CancellationToken ct)
+        {
+            // 和 Load 一样，异常绝不许逃出后台任务。
+            try
+            {
+                var files = reader.ReadCommitFiles(commit.Hash, ct);
+                if (ct.IsCancellationRequested)
+                    return;
+
+                // null 表示 git 调用本身失败；空列表表示这个提交确实没有改动。
+                if (files == null)
+                    Marshal(panel, ct, commit.ApplyLoadFailure);
+                else
+                    Marshal(panel, ct, () => commit.ApplyFiles(files));
+            }
+            catch (Exception e)
+            {
+                ProcessHelper.WriteLog(string.Format(CultureInfo.InvariantCulture,
+                    "GitViewer: failed to read files of {0}: {1}", commit.Hash, e));
+
+                Marshal(panel, ct, commit.ApplyLoadFailure);
             }
         }
 

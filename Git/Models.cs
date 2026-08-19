@@ -57,7 +57,9 @@ namespace QuickLook.Plugin.GitViewer.Git
         public int StashCount { get; set; }
     }
 
-    /// <summary>提交历史里的一条记录。</summary>
+    /// <summary>
+    ///     提交历史里的一条记录。纯数据 —— 显示用的派生属性都在 CommitViewModel 上。
+    /// </summary>
     public sealed class GitCommitInfo
     {
         public string Hash { get; set; }
@@ -71,15 +73,48 @@ namespace QuickLook.Plugin.GitViewer.Git
 
         public string Subject { get; set; }
 
-        public string RelativeTime => TimeFormat.Relative(When);
-        public string AbsoluteTime => When.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss zzz");
-        public string AuthorTooltip => string.IsNullOrEmpty(AuthorEmail) ? AuthorName : AuthorName + " <" + AuthorEmail + ">";
-        public bool HasDecorations => !string.IsNullOrEmpty(Decorations);
+        /// <summary>标题之后的说明正文（git 的 %b），可以是多行，没有正文时为空串。</summary>
+        public string Body { get; set; }
 
-        /// <summary>把装饰拆成一个个小标签，例如 "HEAD -&gt; master"、"tag: v1"。</summary>
-        public string[] DecorationList => string.IsNullOrEmpty(Decorations)
-            ? new string[0]
-            : Decorations.Split(new[] { ", " }, StringSplitOptions.RemoveEmptyEntries);
+        /// <summary>父提交个数（由 %P 数出来）。大于 1 即合并提交。</summary>
+        public int ParentCount { get; set; }
+    }
+
+    /// <summary>一次提交里某个文件的改动类型。</summary>
+    public enum GitFileChangeKind
+    {
+        Added,
+        Modified,
+        Deleted,
+        Renamed,
+        Copied,
+        TypeChanged,
+        Unknown
+    }
+
+    /// <summary>
+    ///     一次提交里的一个文件改动。状态与路径取自 <c>--raw</c> 输出，
+    ///     增删行数取自 <c>--numstat</c> 输出。
+    /// </summary>
+    public sealed class GitFileChange
+    {
+        public GitFileChangeKind Kind { get; set; }
+
+        /// <summary>raw 输出里的原始状态字段，例如 "M"、"R095"。</summary>
+        public string Status { get; set; }
+
+        public string Path { get; set; }
+
+        /// <summary>重命名或复制时的原路径，其余情况为 null。</summary>
+        public string OldPath { get; set; }
+
+        public bool HasOldPath => !string.IsNullOrEmpty(OldPath);
+
+        public int Added { get; set; }
+        public int Deleted { get; set; }
+
+        /// <summary>二进制文件；numstat 对它输出 "-" 而不是行数。</summary>
+        public bool IsBinary { get; set; }
     }
 
     public enum GitRefKind

@@ -32,4 +32,9 @@
     <SolidColorBrush x:Key="RowHover" Color="#FFF2F6FA" />
     <SolidColorBrush x:Key="RowSelected" Color="#FFE3EEF8" />
 
+    <!-- 提交展开后的改动统计。两个主题必须都定义。 -->
+    <SolidColorBrush x:Key="DiffAdded" Color="#FF1A7F37" />
+    <SolidColorBrush x:Key="DiffDeleted" Color="#FFCF222E" />
+    <SolidColorBrush x:Key="DiffNeutral" Color="#FF6E6E6E" />
+
 </ResourceDictionary>

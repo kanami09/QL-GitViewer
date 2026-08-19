@@ -1,11 +1,13 @@
 ﻿using QuickLook.Common.Helpers;
 using QuickLook.Plugin.GitViewer.Git;
 using QuickLook.Plugin.GitViewer.Helpers;
+using QuickLook.Plugin.GitViewer.ViewModels;
 using System;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Interop;
+using System.Windows.Media;
 using System.Windows.Threading;
 
 namespace QuickLook.Plugin.GitViewer
@@ -68,9 +70,59 @@ namespace QuickLook.Plugin.GitViewer
                 item.IsSelected = true;
         }
 
+        /// <summary>
+        ///     单击提交行展开或收起。挂在 ListBox 上而不是模板里，理由同
+        ///     <see cref="OnRowRightButtonDown" />：Themes/Templates.xaml 是不带
+        ///     code-behind 的纯资源字典。
+        /// </summary>
+        private void OnCommitRowClick(object sender, MouseButtonEventArgs e)
+        {
+            var list = sender as ListBox;
+            var source = e.OriginalSource as DependencyObject;
+            if (list == null || source == null)
+                return;
+
+            var item = ItemsControl.ContainerFromElement(list, source) as ListBoxItem;
+            if (item == null)
+                return;
+
+            // 点在已展开的详情区里面（正文、某个文件路径）不该把整行收起来。
+            if (IsWithinNamedElement(source, item, "CommitDetail"))
+                return;
+
+            var commit = item.DataContext as CommitViewModel;
+            if (commit != null)
+                commit.IsExpanded = !commit.IsExpanded;
+        }
+
+        /// <summary>
+        ///     从 <paramref name="source" /> 沿可视树上溯到 <paramref name="boundary" />，
+        ///     途中遇到名为 <paramref name="name" /> 的元素即返回 true。
+        /// </summary>
+        private static bool IsWithinNamedElement(DependencyObject source, DependencyObject boundary, string name)
+        {
+            var current = source;
+
+            while (current != null && current != boundary)
+            {
+                var element = current as FrameworkElement;
+                if (element != null && element.Name == name)
+                    return true;
+
+                // VisualTreeHelper.GetParent 只接受 Visual/Visual3D，碰到别的就停。
+                var visual = current as Visual;
+                if (visual == null)
+                    return false;
+
+                current = VisualTreeHelper.GetParent(visual);
+            }
+
+            return false;
+        }
+
         private void OnCopyCommitHash(object sender, RoutedEventArgs e)
         {
-            var commit = GetSelectedItem(sender) as GitCommitInfo;
+            var commit = GetSelectedItem(sender) as CommitViewModel;
             if (commit != null)
                 CopyToClipboard(commit.Hash);
         }
