@@ -304,14 +304,4 @@ namespace QuickLook.Plugin.GitViewer.Git
                 : default(DateTimeOffset);
         }
     }
-
-    /// <summary>第二阶段加载产出的全部数据。</summary>
-    public sealed class GitRepositoryDetails
-    {
-        public List<GitCommitInfo> Commits { get; set; }
-        public List<GitRefInfo> LocalBranches { get; set; }
-        public List<GitRefInfo> RemoteBranches { get; set; }
-        public List<GitRefInfo> Tags { get; set; }
-        public List<GitRemoteInfo> Remotes { get; set; }
-    }
 }

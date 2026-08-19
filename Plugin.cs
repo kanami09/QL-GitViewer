@@ -1,6 +1,7 @@
 ﻿using QuickLook.Common.Helpers;
 using QuickLook.Common.Plugin;
 using QuickLook.Plugin.GitViewer.Git;
+using QuickLook.Plugin.GitViewer.Helpers;
 using System;
 using System.Globalization;
 using System.Threading;
@@ -53,7 +54,8 @@ namespace QuickLook.Plugin.GitViewer
             if (location == null)
             {
                 context.Title = path;
-                panel.ShowError(Translate.Get("ErrorNotARepository", "This folder is not a git repository."));
+                panel.Model.ErrorMessage =
+                    Translate.Get("ErrorNotARepository", "This folder is not a git repository.");
                 context.IsBusy = false;
                 return;
             }
@@ -62,9 +64,9 @@ namespace QuickLook.Plugin.GitViewer
 
             if (!GitExecutable.IsAvailable)
             {
-                panel.ShowFallbackHeader(location);
-                panel.ShowError(Translate.Get("ErrorNoGit",
-                    "git.exe was not found. Install Git for Windows to preview repositories."));
+                panel.Model.ApplyFallbackHeader(location);
+                panel.Model.ErrorMessage = Translate.Get("ErrorNoGit",
+                    "git.exe was not found. Install Git for Windows to preview repositories.");
                 context.IsBusy = false;
                 return;
             }
@@ -121,7 +123,7 @@ namespace QuickLook.Plugin.GitViewer
 
                 Marshal(panel, ct, () =>
                 {
-                    panel.ApplyOverview(location, overview);
+                    panel.Model.ApplyOverview(location, overview);
                     context.IsBusy = false;
                 });
 
@@ -129,7 +131,7 @@ namespace QuickLook.Plugin.GitViewer
                 if (ct.IsCancellationRequested)
                     return;
 
-                Marshal(panel, ct, () => panel.ApplyDetails(details));
+                Marshal(panel, ct, () => panel.Model.ApplyDetails(details));
             }
             catch (Exception e)
             {
@@ -138,8 +140,8 @@ namespace QuickLook.Plugin.GitViewer
 
                 Marshal(panel, ct, () =>
                 {
-                    panel.ShowError(Translate.Get("ErrorReadFailed", "Could not read this repository.")
-                                    + Environment.NewLine + e.Message);
+                    panel.Model.ErrorMessage = Translate.Get("ErrorReadFailed", "Could not read this repository.")
+                                               + Environment.NewLine + e.Message;
                     context.IsBusy = false;
                 });
             }

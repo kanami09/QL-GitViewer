@@ -1,7 +1,7 @@
 ﻿using QuickLook.Common.Helpers;
 using QuickLook.Plugin.GitViewer.Git;
+using QuickLook.Plugin.GitViewer.Helpers;
 using System;
-using System.Collections.Generic;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -41,104 +41,29 @@ namespace QuickLook.Plugin.GitViewer
             Resources.MergedDictionaries.Add(new ResourceDictionary { Source = uri });
         }
 
-        /// <summary>填充头部概览。加载的第一阶段一返回就会调用。</summary>
-        public void ApplyOverview(RepositoryLocation location, GitRepositoryInfo info)
+        /// <summary>
+        ///     供 <see cref="Plugin" /> 在后台加载结束后回填数据。填充逻辑全部在
+        ///     视图模型里，这里不再做转发。
+        /// </summary>
+        public GitPanelViewModel Model
         {
-            _model.RepositoryName = location.DisplayName;
-            _model.RepositoryPath = FirstNonEmpty(info.WorkTree, info.GitDir, location.StartDirectory);
-
-            _model.BranchLabel = !string.IsNullOrEmpty(info.BranchName)
-                ? info.BranchName
-                : Translate.Get("HeadLabel", "HEAD");
-
-            _model.ShortHash = info.ShortHash;
-            _model.BadgeText = BuildBadge(info);
-
-            // 找不到可达的标签时，"describe --always" 会退化成缩写哈希，
-            // 那样就和旁边的哈希标签重复了。
-            _model.Describe = !string.IsNullOrEmpty(info.Describe) && info.Describe != info.ShortHash
-                ? info.Describe
-                : null;
-
-            if (info.HasUpstream)
-            {
-                _model.UpstreamText = info.Upstream;
-                _model.SyncText = BuildSyncText(info);
-            }
-
-            if (info.StashCount > 0)
-                _model.StashText = string.Format(
-                    Translate.Get(info.StashCount == 1 ? "StashOne" : "StashMany",
-                        info.StashCount == 1 ? "{0} stash" : "{0} stashes"),
-                    info.StashCount);
-        }
-
-        /// <summary>填充各个页签。加载的第二阶段返回时调用。</summary>
-        public void ApplyDetails(GitRepositoryDetails details)
-        {
-            _model.Commits = details.Commits;
-            _model.SetBranches(details.LocalBranches, details.RemoteBranches);
-            _model.Tags = details.Tags;
-            _model.Remotes = details.Remotes;
-        }
-
-        /// <summary>用一条消息取代页签区域。git 缺失或读取失败时使用。</summary>
-        public void ShowError(string message)
-        {
-            _model.ErrorMessage = message;
-        }
-
-        /// <summary>完全无法读取仓库时，头部退而求其次显示的内容。</summary>
-        public void ShowFallbackHeader(RepositoryLocation location)
-        {
-            _model.RepositoryName = location.DisplayName;
-            _model.RepositoryPath = location.StartDirectory;
-            _model.BranchLabel = Translate.Get("Unknown", "unknown");
-        }
-
-        private static string BuildBadge(GitRepositoryInfo info)
-        {
-            var parts = new List<string>();
-
-            if (info.IsBare)
-                parts.Add(Translate.Get("BadgeBare", "bare"));
-            if (info.IsEmpty)
-                parts.Add(Translate.Get("BadgeEmpty", "no commits"));
-            if (info.IsDetached)
-                parts.Add(Translate.Get("BadgeDetached", "detached HEAD"));
-
-            return parts.Count == 0 ? null : string.Join(" - ", parts.ToArray());
-        }
-
-        private static string BuildSyncText(GitRepositoryInfo info)
-        {
-            if (info.Ahead == 0 && info.Behind == 0)
-                return Translate.Get("SyncUpToDate", "up to date");
-
-            var parts = new List<string>();
-
-            if (info.Ahead > 0)
-                parts.Add(string.Format(Translate.Get("SyncAhead", "{0} ahead"), info.Ahead));
-            if (info.Behind > 0)
-                parts.Add(string.Format(Translate.Get("SyncBehind", "{0} behind"), info.Behind));
-
-            return string.Join(", ", parts.ToArray());
-        }
-
-        private static string FirstNonEmpty(params string[] candidates)
-        {
-            foreach (var candidate in candidates)
-                if (!string.IsNullOrEmpty(candidate))
-                    return candidate;
-
-            return string.Empty;
+            get { return _model; }
         }
 
         // WPF 右键点击不会选中行，不做这一步的话右键菜单操作的就会是
         // 上一次左键点中的那一行。
+        // 挂在 ListBox 上而不是行容器的样式上：EventSetter 的 Handler 要求所在的
+        // ResourceDictionary 带 x:Class code-behind，而行样式已经搬进
+        // Themes/Controls.xaml，那是个纯资源文件。
         private void OnRowRightButtonDown(object sender, MouseButtonEventArgs e)
         {
-            var item = sender as ListBoxItem;
+            var list = sender as ListBox;
+            var source = e.OriginalSource as DependencyObject;
+            if (list == null || source == null)
+                return;
+
+            // 点在列表空白处时找不到行容器，返回 null，此时保持原有选中不变。
+            var item = ItemsControl.ContainerFromElement(list, source) as ListBoxItem;
             if (item != null)
                 item.IsSelected = true;
         }

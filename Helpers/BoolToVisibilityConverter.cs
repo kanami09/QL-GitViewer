@@ -3,7 +3,7 @@ using System.Globalization;
 using System.Windows;
 using System.Windows.Data;
 
-namespace QuickLook.Plugin.GitViewer
+namespace QuickLook.Plugin.GitViewer.Helpers
 {
     /// <summary>
     ///     bool 转 Visibility，并支持反转。框架自带的 BooleanToVisibilityConverter 会忽略

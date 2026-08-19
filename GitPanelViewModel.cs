@@ -1,4 +1,5 @@
 ﻿using QuickLook.Plugin.GitViewer.Git;
+using QuickLook.Plugin.GitViewer.Helpers;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
@@ -209,6 +210,13 @@ namespace QuickLook.Plugin.GitViewer
             if (local != null) all.AddRange(local);
             if (remote != null) all.AddRange(remote);
 
+            // 分组标题在这里贴上去，模型自己不认识界面文案。
+            var localLabel = Translate.Get("SectionLocalBranches", "Local");
+            var remoteLabel = Translate.Get("SectionRemoteBranches", "Remote-tracking");
+
+            foreach (var item in all)
+                item.GroupLabel = item.Kind == GitRefKind.RemoteBranch ? remoteLabel : localLabel;
+
             _branchCount = all.Count;
 
             var view = new ListCollectionView(all);
@@ -241,6 +249,93 @@ namespace QuickLook.Plugin.GitViewer
         }
 
         public bool HasRemotes => _remotes != null && _remotes.Count > 0;
+
+        /// <summary>填充头部概览。加载的第一阶段一返回就会调用。</summary>
+        public void ApplyOverview(RepositoryLocation location, GitRepositoryInfo info)
+        {
+            RepositoryName = location.DisplayName;
+            RepositoryPath = FirstNonEmpty(info.WorkTree, info.GitDir, location.StartDirectory);
+
+            BranchLabel = !string.IsNullOrEmpty(info.BranchName)
+                ? info.BranchName
+                : Translate.Get("HeadLabel", "HEAD");
+
+            ShortHash = info.ShortHash;
+            BadgeText = BuildBadge(info);
+
+            // 找不到可达的标签时，"describe --always" 会退化成缩写哈希，
+            // 那样就和旁边的哈希标签重复了。
+            Describe = !string.IsNullOrEmpty(info.Describe) && info.Describe != info.ShortHash
+                ? info.Describe
+                : null;
+
+            if (info.HasUpstream)
+            {
+                UpstreamText = info.Upstream;
+                SyncText = BuildSyncText(info);
+            }
+
+            if (info.StashCount > 0)
+                StashText = string.Format(
+                    Translate.Get(info.StashCount == 1 ? "StashOne" : "StashMany",
+                        info.StashCount == 1 ? "{0} stash" : "{0} stashes"),
+                    info.StashCount);
+        }
+
+        /// <summary>填充各个页签。加载的第二阶段返回时调用。</summary>
+        public void ApplyDetails(GitRepositoryDetails details)
+        {
+            Commits = details.Commits;
+            SetBranches(details.LocalBranches, details.RemoteBranches);
+            Tags = details.Tags;
+            Remotes = details.Remotes;
+        }
+
+        /// <summary>完全无法读取仓库时，头部退而求其次显示的内容。</summary>
+        public void ApplyFallbackHeader(RepositoryLocation location)
+        {
+            RepositoryName = location.DisplayName;
+            RepositoryPath = location.StartDirectory;
+            BranchLabel = Translate.Get("Unknown", "unknown");
+        }
+
+        private static string BuildBadge(GitRepositoryInfo info)
+        {
+            var parts = new List<string>();
+
+            if (info.IsBare)
+                parts.Add(Translate.Get("BadgeBare", "bare"));
+            if (info.IsEmpty)
+                parts.Add(Translate.Get("BadgeEmpty", "no commits"));
+            if (info.IsDetached)
+                parts.Add(Translate.Get("BadgeDetached", "detached HEAD"));
+
+            return parts.Count == 0 ? null : string.Join(" - ", parts.ToArray());
+        }
+
+        private static string BuildSyncText(GitRepositoryInfo info)
+        {
+            if (info.Ahead == 0 && info.Behind == 0)
+                return Translate.Get("SyncUpToDate", "up to date");
+
+            var parts = new List<string>();
+
+            if (info.Ahead > 0)
+                parts.Add(string.Format(Translate.Get("SyncAhead", "{0} ahead"), info.Ahead));
+            if (info.Behind > 0)
+                parts.Add(string.Format(Translate.Get("SyncBehind", "{0} behind"), info.Behind));
+
+            return string.Join(", ", parts.ToArray());
+        }
+
+        private static string FirstNonEmpty(params string[] candidates)
+        {
+            foreach (var candidate in candidates)
+                if (!string.IsNullOrEmpty(candidate))
+                    return candidate;
+
+            return string.Empty;
+        }
 
         public event PropertyChangedEventHandler PropertyChanged;
 

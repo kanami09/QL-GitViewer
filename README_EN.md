@@ -1,4 +1,4 @@
-![git icon](./git.svg)
+![git icon](./docs/git.svg)
 
 # QuickLook.Plugin.GitViewer
 

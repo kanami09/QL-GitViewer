@@ -4,7 +4,7 @@ using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Threading;
 
-namespace QuickLook.Plugin.GitViewer
+namespace QuickLook.Plugin.GitViewer.Helpers
 {
     /// <summary>
     ///     直接调用 Win32 剪贴板 API 写入文本。

@@ -1,4 +1,6 @@
-﻿using System;
+﻿using QuickLook.Plugin.GitViewer.Helpers;
+using System;
+using System.Collections.Generic;
 
 namespace QuickLook.Plugin.GitViewer.Git
 {
@@ -115,13 +117,10 @@ namespace QuickLook.Plugin.GitViewer.Git
         public bool HasTrack => !string.IsNullOrEmpty(Track);
 
         /// <summary>
-        ///     分支页分组显示用的标题。本地与远程合并在同一个列表里、
-        ///     靠分组分隔，而不是用两个独立列表 —— 后者的选中状态各管各的，
-        ///     会同时出现两行高亮。
+        ///     分支页分组显示用的标题，由 <see cref="GitPanelViewModel.SetBranches" /> 填入。
+        ///     文案不在这里取：模型层不引界面翻译，否则 Git 命名空间就跟 UI 绑死了。
         /// </summary>
-        public string GroupLabel => Kind == GitRefKind.RemoteBranch
-            ? Translate.Get("SectionRemoteBranches", "Remote-tracking")
-            : Translate.Get("SectionLocalBranches", "Local");
+        public string GroupLabel { get; set; }
     }
 
     /// <summary>一个已配置的远程仓库及其 fetch URL。</summary>
@@ -129,5 +128,17 @@ namespace QuickLook.Plugin.GitViewer.Git
     {
         public string Name { get; set; }
         public string Url { get; set; }
+    }
+
+    /// <summary>
+    ///     加载第二阶段产出的全部数据，由 <see cref="GitRepositoryReader.ReadDetails" /> 一次性返回。
+    /// </summary>
+    public sealed class GitRepositoryDetails
+    {
+        public List<GitCommitInfo> Commits { get; set; }
+        public List<GitRefInfo> LocalBranches { get; set; }
+        public List<GitRefInfo> RemoteBranches { get; set; }
+        public List<GitRefInfo> Tags { get; set; }
+        public List<GitRemoteInfo> Remotes { get; set; }
     }
 }

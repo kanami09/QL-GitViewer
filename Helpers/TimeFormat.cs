@@ -1,6 +1,6 @@
 ﻿using System;
 
-namespace QuickLook.Plugin.GitViewer.Git
+namespace QuickLook.Plugin.GitViewer.Helpers
 {
     /// <summary>提交列表和分支列表里显示的相对时间。</summary>
     internal static class TimeFormat

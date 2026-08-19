@@ -2,7 +2,7 @@
 using System;
 using System.IO;
 
-namespace QuickLook.Plugin.GitViewer.Git
+namespace QuickLook.Plugin.GitViewer.Helpers
 {
     /// <summary>
     ///     界面上的本地化文案，读取与本程序集放在一起的 Translations.config。
