@@ -78,10 +78,19 @@
                     Visibility="{Binding HasError, Converter={StaticResource BoolToVis}, ConverterParameter=invert}">
             <TabItem Header="{Binding CommitsHeader}">
                 <Grid>
-                    <ListBox ItemsSource="{Binding Commits}" ItemTemplate="{StaticResource CommitTemplate}"
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <!-- 提交是一页页读进来的：ScrollChanged 里发现快滚到底就去要下一页，
+                         细节见 GitPanel.xaml.cs 的 OnCommitsScrollChanged。 -->
+                    <ListBox Grid.Row="0"
+                             ItemsSource="{Binding Commits}" ItemTemplate="{StaticResource CommitTemplate}"
                              Style="{StaticResource RowListStyle}"
                              PreviewMouseRightButtonDown="OnRowRightButtonDown"
                              PreviewMouseLeftButtonUp="OnCommitRowClick"
+                             ScrollViewer.ScrollChanged="OnCommitsScrollChanged"
                              Visibility="{Binding HasCommits, Converter={StaticResource BoolToVis}}">
                         <ListBox.ContextMenu>
                             <ContextMenu Style="{StaticResource OwnerContextMenuStyle}">
@@ -89,9 +98,16 @@
                             </ContextMenu>
                         </ListBox.ContextMenu>
                     </ListBox>
-                    <TextBlock Text="{Binding EmptyCommitsText}" Style="{StaticResource EmptyTextStyle}"
+                    <TextBlock Grid.Row="0"
+                               Text="{Binding EmptyCommitsText}" Style="{StaticResource EmptyTextStyle}"
                                Visibility="{Binding HasCommits, Converter={StaticResource BoolToVis},
                                             ConverterParameter=invert}" />
+
+                    <Border Grid.Row="1" Style="{StaticResource ListFooterBorderStyle}"
+                            Visibility="{Binding HasCommitsStatus, Converter={StaticResource BoolToVis}}">
+                        <TextBlock Text="{Binding CommitsStatusText}"
+                                   Style="{StaticResource ListFooterTextStyle}" />
+                    </Border>
                 </Grid>
             </TabItem>
 

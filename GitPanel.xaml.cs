@@ -120,6 +120,25 @@ namespace QuickLook.Plugin.GitViewer
             return false;
         }
 
+        /// <summary>
+        ///     提交列表快滚到底时去要下一页。
+        ///     <para>
+        ///     提前一屏就开始要，用户滚到底时下一页通常已经在了。首页不满一屏的情况也一并
+        ///     覆盖了：那时剩余距离是 0，会直接触发；而每追加一页都会因为内容变高再来一次
+        ///     ScrollChanged，于是自动一页页补到填满视口为止。
+        ///     </para>
+        ///     <para>去重和"读到头了就别再要"由视图模型的 RequestMoreCommits 负责。</para>
+        /// </summary>
+        private void OnCommitsScrollChanged(object sender, ScrollChangedEventArgs e)
+        {
+            // 还没排版出来，这时候的偏移量说明不了任何问题。
+            if (e.ViewportHeight <= 0 || e.ExtentHeight <= 0)
+                return;
+
+            if (e.ExtentHeight - e.VerticalOffset - e.ViewportHeight <= e.ViewportHeight)
+                _model.RequestMoreCommits();
+        }
+
         private void OnCopyCommitHash(object sender, RoutedEventArgs e)
         {
             var commit = GetSelectedItem(sender) as CommitViewModel;

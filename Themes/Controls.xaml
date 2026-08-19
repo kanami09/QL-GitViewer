@@ -55,6 +55,20 @@
         <Setter Property="VerticalAlignment" Value="Center" />
     </Style>
 
+    <!-- 列表底部的状态行（"正在读取更多提交…"、"共 N 条提交"）。
+         占一行布局而不是浮在列表上方：它是常驻的，盖住最后一行会让人以为列表到底了。 -->
+    <Style x:Key="ListFooterBorderStyle" TargetType="Border">
+        <Setter Property="BorderBrush" Value="{DynamicResource Separator}" />
+        <Setter Property="BorderThickness" Value="0,1,0,0" />
+        <Setter Property="Padding" Value="12,5" />
+    </Style>
+
+    <Style x:Key="ListFooterTextStyle" TargetType="TextBlock">
+        <Setter Property="Foreground" Value="{DynamicResource MutedText}" />
+        <Setter Property="FontSize" Value="11" />
+        <Setter Property="HorizontalAlignment" Value="Center" />
+    </Style>
+
     <!-- 行容器：去掉焦点虚线框，悬停与选中颜色跟随主题。
          右键选中行的逻辑不在这里：EventSetter 的 Handler 要求字典带 x:Class code-behind，
          那样这个纯样式字典就得挂一个代码文件。改由 GitPanel.xaml 在每个 ListBox 上

@@ -18,7 +18,15 @@ namespace QuickLook.Plugin.GitViewer.Git
         /// <summary>记录分隔符，这样提交说明里可以出现任何字符，包括换行。</summary>
         private const char RecordSeparator = '\x1e';
 
-        private const int CommitLimit = 50;
+        /// <summary>一页提交的条数。列表是滚到底再取下一页的，所以不必一次要太多。</summary>
+        public const int CommitPageSize = 100;
+
+        /// <summary>
+        ///     提交记录的格式。%b 放在最后：它可以包含任意字符（含换行），
+        ///     而记录之间靠 %x1e 分隔，所以多行正文不会破坏解析。
+        /// </summary>
+        private const string CommitFormat =
+            "--pretty=format:%H%x1f%h%x1f%an%x1f%ae%x1f%aI%x1f%D%x1f%s%x1f%P%x1f%b%x1e";
 
         private readonly GitCommandRunner _runner;
 
@@ -99,18 +107,19 @@ namespace QuickLook.Plugin.GitViewer.Git
             return info;
         }
 
-        /// <summary>第二阶段：明细查询，并行执行。</summary>
+        /// <summary>
+        ///     第二阶段：明细查询，并行执行。
+        ///     提交列表不在这里，它是单独一条常驻的流，见 <see cref="BeginReadCommits" />。
+        /// </summary>
         public GitRepositoryDetails ReadDetails(CancellationToken ct)
         {
-            var commitsTask = Task.Run(() => ReadCommits(ct), ct);
             var refsTask = Task.Run(() => ReadRefs(ct), ct);
             var remotesTask = Task.Run(() => ReadRemotes(ct), ct);
 
-            Task.WaitAll(new Task[] { commitsTask, refsTask, remotesTask });
+            Task.WaitAll(new Task[] { refsTask, remotesTask });
 
             var details = new GitRepositoryDetails
             {
-                Commits = commitsTask.Result,
                 Remotes = remotesTask.Result,
                 LocalBranches = new List<GitRefInfo>(),
                 RemoteBranches = new List<GitRefInfo>(),
@@ -134,45 +143,66 @@ namespace QuickLook.Plugin.GitViewer.Git
             return details;
         }
 
-        private List<GitCommitInfo> ReadCommits(CancellationToken ct)
+        /// <summary>
+        ///     起一条读整部历史的 <c>git log</c>，不加任何条数上限。
+        ///     <para>
+        ///     进程一直留着，由 <see cref="ReadCommitPage" /> 一页页取。我们不取的时候
+        ///     git 就阻塞在写管道上，所以"不设上限"并不等于"把整部历史读进内存"——
+        ///     真正读了多少，取决于用户往下滚了多远。
+        ///     </para>
+        /// </summary>
+        /// <returns>永不为 null。用完必须 Dispose，或者由 runner 释放时统一收掉。</returns>
+        public GitRecordStream BeginReadCommits(CancellationToken ct)
+        {
+            return _runner.Start(ct, RecordSeparator, "log", "--no-color", CommitFormat);
+        }
+
+        /// <summary>
+        ///     从 <see cref="BeginReadCommits" /> 的流里取下一页提交。
+        ///     返回条数不足一页即说明已经走到最初的那条提交
+        ///     （<see cref="GitRecordStream.IsFinished" /> 为 true）。
+        ///     <para>流不是线程安全的，同一条流上的调用必须串行。</para>
+        /// </summary>
+        public List<GitCommitInfo> ReadCommitPage(GitRecordStream stream, CancellationToken ct)
         {
             var commits = new List<GitCommitInfo>();
 
-            // %b 放在最后：它可以包含任意字符（含换行），而记录之间靠 %x1e 分隔，
-            // 所以多行正文不会破坏解析。
-            const string format = "--pretty=format:%H%x1f%h%x1f%an%x1f%ae%x1f%aI%x1f%D%x1f%s%x1f%P%x1f%b%x1e";
-            var result = _runner.Run(ct, "log", "-n", CommitLimit.ToString(CultureInfo.InvariantCulture),
-                "--no-color", format);
-
-            if (!result.Success)
-                return commits;
-
-            foreach (var record in result.StdOut.Split(RecordSeparator))
+            foreach (var record in stream.ReadRecords(CommitPageSize, ct))
             {
-                var trimmed = record.TrimStart('\r', '\n');
-                if (trimmed.Length == 0)
-                    continue;
-
-                var f = trimmed.Split(FieldSeparator);
-                if (f.Length < 9)
-                    continue;
-
-                commits.Add(new GitCommitInfo
-                {
-                    Hash = f[0],
-                    ShortHash = f[1],
-                    AuthorName = f[2],
-                    AuthorEmail = f[3],
-                    When = ParseDate(f[4]),
-                    Decorations = f[5],
-                    Subject = f[6],
-                    ParentCount = CountParents(f[7]),
-                    // %b 末尾总带一个换行，不去掉的话展开后正文下面会多出一片空白。
-                    Body = f[8].TrimEnd('\r', '\n')
-                });
+                var commit = ParseCommitRecord(record);
+                if (commit != null)
+                    commits.Add(commit);
             }
 
             return commits;
+        }
+
+        /// <summary>解析一条提交记录，字段顺序见 <see cref="CommitFormat" />。</summary>
+        /// <returns>字段数对不上时返回 null。</returns>
+        private static GitCommitInfo ParseCommitRecord(string record)
+        {
+            // 除第一条外，每条记录前面都跟着上一条末尾分隔符之后的那个换行。
+            var trimmed = record.TrimStart('\r', '\n');
+            if (trimmed.Length == 0)
+                return null;
+
+            var f = trimmed.Split(FieldSeparator);
+            if (f.Length < 9)
+                return null;
+
+            return new GitCommitInfo
+            {
+                Hash = f[0],
+                ShortHash = f[1],
+                AuthorName = f[2],
+                AuthorEmail = f[3],
+                When = ParseDate(f[4]),
+                Decorations = f[5],
+                Subject = f[6],
+                ParentCount = CountParents(f[7]),
+                // %b 末尾总带一个换行，不去掉的话展开后正文下面会多出一片空白。
+                Body = f[8].TrimEnd('\r', '\n')
+            };
         }
 
         /// <summary>

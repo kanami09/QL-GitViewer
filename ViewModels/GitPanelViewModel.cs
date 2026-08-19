@@ -1,11 +1,20 @@
 ﻿using QuickLook.Plugin.GitViewer.Git;
 using QuickLook.Plugin.GitViewer.Helpers;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Globalization;
 using System.Windows.Data;
 
 namespace QuickLook.Plugin.GitViewer.ViewModels
 {
+    /// <summary>
+    ///     请求读取下一页提交。由 <see cref="Plugin" /> 装配，实现负责在后台读流并把结果
+    ///     切回 UI 线程调 <see cref="GitPanelViewModel.AppendCommits" /> 或
+    ///     <see cref="GitPanelViewModel.ApplyCommitsLoadFailure" />。
+    /// </summary>
+    public delegate void CommitPageLoader();
+
     /// <summary>
     ///     <see cref="GitPanel" /> 的数据源。分两步在 UI 线程上填充：
     ///     先填头部概览，等明细查询返回后再填各个页签的内容。
@@ -14,8 +23,15 @@ namespace QuickLook.Plugin.GitViewer.ViewModels
     {
         private string _badgeText;
         private string _branchLabel;
-        private IList<CommitViewModel> _commits = new List<CommitViewModel>();
+        private readonly ObservableCollection<CommitViewModel> _commits = new ObservableCollection<CommitViewModel>();
+        private bool _hasMoreCommits = true;
+        private bool _isLoadingCommits;
+        private bool _commitsLoadFailed;
         private string _describe;
+        private readonly string _loadingMoreCommitsText;
+        private readonly string _allCommitsLoadedOneText;
+        private readonly string _allCommitsLoadedText;
+        private readonly string _commitsLoadFailedText;
         private string _errorMessage;
         private ICollectionView _branchesView;
         private int _branchCount;
@@ -44,6 +60,11 @@ namespace QuickLook.Plugin.GitViewer.ViewModels
             CopyHashText = Translate.Get("MenuCopyHash", "Copy commit hash");
             CopyNameText = Translate.Get("MenuCopyName", "Copy name");
             CopyUrlText = Translate.Get("MenuCopyUrl", "Copy URL");
+
+            _loadingMoreCommitsText = Translate.Get("CommitsLoadingMore", "Loading more commits…");
+            _allCommitsLoadedOneText = Translate.Get("CommitsAllLoadedOne", "{0} commit in total");
+            _allCommitsLoadedText = Translate.Get("CommitsAllLoaded", "{0} commits in total");
+            _commitsLoadFailedText = Translate.Get("CommitsLoadMoreFailed", "Could not read more commits.");
         }
 
         // 固定文案，构造时解析一次即可。
@@ -177,17 +198,98 @@ namespace QuickLook.Plugin.GitViewer.ViewModels
 
         public bool HasToast => !string.IsNullOrEmpty(_toastText);
 
-        public IList<CommitViewModel> Commits
+        /// <summary>
+        ///     提交列表。集合实例从头到尾只有一个：一页页读进来的提交是追加进去的，
+        ///     换实例会让列表整个重建，已经展开的行会收起来，滚动位置也会跳回顶部。
+        /// </summary>
+        public ObservableCollection<CommitViewModel> Commits => _commits;
+
+        public bool HasCommits => _commits.Count > 0;
+
+        /// <summary>还没读到最初的那条提交。</summary>
+        public bool HasMoreCommits => _hasMoreCommits;
+
+        /// <summary>提交列表下方的状态行，没什么可说的时候为 null。</summary>
+        public string CommitsStatusText
         {
-            get { return _commits; }
-            set
+            get
             {
-                Set(ref _commits, value);
-                OnPropertyChanged("HasCommits");
+                if (_commitsLoadFailed)
+                    return _commitsLoadFailedText;
+
+                if (_isLoadingCommits)
+                    return _loadingMoreCommitsText;
+
+                // 全读完了才敢报总数 —— 中途报的是"已加载多少"，不是"一共多少"。
+                if (!_hasMoreCommits && _commits.Count > 0)
+                    return string.Format(CultureInfo.CurrentCulture,
+                        _commits.Count == 1 ? _allCommitsLoadedOneText : _allCommitsLoadedText,
+                        _commits.Count);
+
+                return null;
             }
         }
 
-        public bool HasCommits => _commits != null && _commits.Count > 0;
+        public bool HasCommitsStatus => !string.IsNullOrEmpty(CommitsStatusText);
+
+        /// <summary>
+        ///     请求读取下一页提交。列表滚到接近底部时由 <see cref="GitPanel" /> 调用，
+        ///     滚动事件会连着来好几发，所以这里必须自己去重。
+        ///     <para>
+        ///     "同一时刻只有一次读取在跑"也是流那边的要求：<see cref="GitRecordStream" />
+        ///     不是线程安全的。
+        ///     </para>
+        /// </summary>
+        public void RequestMoreCommits()
+        {
+            if (_isLoadingCommits || !_hasMoreCommits || _commitsLoadFailed || MoreCommitsLoader == null)
+                return;
+
+            _isLoadingCommits = true;
+            NotifyCommitsStatus();
+
+            MoreCommitsLoader();
+        }
+
+        /// <summary>
+        ///     追加一页提交。必须在 UI 线程上调用。
+        /// </summary>
+        /// <param name="commits">这一页读到的提交，可以为空。</param>
+        /// <param name="finished">是否已经读到最初的那条提交。</param>
+        public void AppendCommits(IList<GitCommitInfo> commits, bool finished)
+        {
+            var wasEmpty = _commits.Count == 0;
+
+            if (commits != null)
+                foreach (var commit in commits)
+                    _commits.Add(new CommitViewModel(commit, FilesLoader));
+
+            _isLoadingCommits = false;
+            _hasMoreCommits = !finished;
+
+            if (wasEmpty != (_commits.Count == 0))
+                OnPropertyChanged("HasCommits");
+
+            OnPropertyChanged("HasMoreCommits");
+            NotifyCommitsStatus();
+        }
+
+        /// <summary>读取提交失败。必须在 UI 线程上调用。之后不再尝试，免得滚动一次重试一次。</summary>
+        public void ApplyCommitsLoadFailure()
+        {
+            _isLoadingCommits = false;
+            _hasMoreCommits = false;
+            _commitsLoadFailed = true;
+
+            OnPropertyChanged("HasMoreCommits");
+            NotifyCommitsStatus();
+        }
+
+        private void NotifyCommitsStatus()
+        {
+            OnPropertyChanged("CommitsStatusText");
+            OnPropertyChanged("HasCommitsStatus");
+        }
 
         /// <summary>
         ///     本地与远程分支合并后的分组视图。用单个列表加分组，
@@ -283,19 +385,20 @@ namespace QuickLook.Plugin.GitViewer.ViewModels
 
         /// <summary>
         ///     展开某条提交时用来惰性读取文件改动。由 <see cref="Plugin" /> 在创建
-        ///     runner 之后装配，必须早于 <see cref="ApplyDetails" />。
+        ///     runner 之后装配，必须早于 <see cref="AppendCommits" />。
         /// </summary>
         public CommitFilesLoader FilesLoader { get; set; }
 
-        /// <summary>填充各个页签。加载的第二阶段返回时调用。</summary>
+        /// <summary>
+        ///     读取下一页提交。由 <see cref="Plugin" /> 在起好提交流之后装配，
+        ///     必须早于第一次 <see cref="AppendCommits" /> —— 否则第一页画出来时
+        ///     列表已经在往下要第二页了，却找不到人去读。
+        /// </summary>
+        public CommitPageLoader MoreCommitsLoader { get; set; }
+
+        /// <summary>填充分支、标签和远程页签。加载的第二阶段返回时调用。</summary>
         public void ApplyDetails(GitRepositoryDetails details)
         {
-            var commits = new List<CommitViewModel>();
-            if (details.Commits != null)
-                foreach (var commit in details.Commits)
-                    commits.Add(new CommitViewModel(commit, FilesLoader));
-
-            Commits = commits;
             SetBranches(details.LocalBranches, details.RemoteBranches);
             Tags = details.Tags;
             Remotes = details.Remotes;

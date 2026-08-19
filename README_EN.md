@@ -1,4 +1,4 @@
-![git icon](./docs/git.svg)
+﻿![git icon](./docs/git.svg)
 
 # QuickLook.Plugin.GitViewer
 
@@ -13,7 +13,7 @@ Select a repository folder, or its hidden `.git` folder, and press <kbd>Space</k
 
 - **Overview** — current branch or detached `HEAD`, short commit hash, `git describe`,
   ahead/behind against the upstream, stash count, and a badge for bare / empty / detached state.
-- **Commits** — the last 50 commits with hash, subject, ref decorations, author and relative time.
+- **Commits** — the whole history down to the root commit, with hash, subject, ref decorations, author and relative time.
   Click a row to expand it for the full commit body and the files it touched.
 - **Branches** — local and remote-tracking branches, current branch marked, upstream tracking state.
 - **Tags** — tag name, target object and message.

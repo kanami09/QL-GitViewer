@@ -200,10 +200,10 @@ namespace QuickLook.Plugin.GitViewer.Git
 
     /// <summary>
     ///     加载第二阶段产出的全部数据，由 <see cref="GitRepositoryReader.ReadDetails" /> 一次性返回。
+    ///     提交列表不在其中：它是一页页读进来的，见 <see cref="GitRepositoryReader.ReadCommitPage" />。
     /// </summary>
     public sealed class GitRepositoryDetails
     {
-        public List<GitCommitInfo> Commits { get; set; }
         public List<GitRefInfo> LocalBranches { get; set; }
         public List<GitRefInfo> RemoteBranches { get; set; }
         public List<GitRefInfo> Tags { get; set; }

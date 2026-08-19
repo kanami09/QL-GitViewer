@@ -4,6 +4,7 @@ using QuickLook.Plugin.GitViewer.Git;
 using QuickLook.Plugin.GitViewer.Helpers;
 using QuickLook.Plugin.GitViewer.ViewModels;
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.Threading;
 using System.Threading.Tasks;
@@ -79,7 +80,7 @@ namespace QuickLook.Plugin.GitViewer
             var token = _cts.Token;
             var reader = new GitRepositoryReader(runner);
 
-            // 展开某条提交时才去读它的文件改动。必须在 ApplyDetails 之前装好，
+            // 展开某条提交时才去读它的文件改动。必须在 AppendCommits 之前装好，
             // 因为提交行是在那里包出来的，装配晚了它们就拿不到加载器。
             panel.Model.FilesLoader = commit => Task.Run(() => LoadFiles(commit, panel, reader, token));
 
@@ -133,6 +134,22 @@ namespace QuickLook.Plugin.GitViewer
                     context.IsBusy = false;
                 });
 
+                // 提交列表是一条常驻的流，先读第一页把默认页签填上，
+                // 剩下的等用户往下滚再要。流由 runner 释放时统一收掉。
+                var commitStream = reader.BeginReadCommits(ct);
+                var firstPage = reader.ReadCommitPage(commitStream, ct);
+                if (ct.IsCancellationRequested)
+                    return;
+
+                Marshal(panel, ct, () =>
+                {
+                    // 装配必须在追加之前：第一页一画出来，列表可能立刻就要下一页。
+                    panel.Model.MoreCommitsLoader =
+                        () => Task.Run(() => LoadMoreCommits(reader, commitStream, panel, ct));
+
+                    ApplyCommitPage(panel.Model, firstPage, commitStream);
+                });
+
                 var details = reader.ReadDetails(ct);
                 if (ct.IsCancellationRequested)
                     return;
@@ -151,6 +168,43 @@ namespace QuickLook.Plugin.GitViewer
                     context.IsBusy = false;
                 });
             }
+        }
+
+        /// <summary>
+        ///     读取下一页提交。列表滚到接近底部时由视图模型经 MoreCommitsLoader 触发。
+        ///     <para>
+        ///     视图模型保证同一时刻只有一次读取在跑，所以这里可以放心地按顺序读同一条流。
+        ///     </para>
+        /// </summary>
+        private static void LoadMoreCommits(GitRepositoryReader reader, GitRecordStream stream, GitPanel panel,
+            CancellationToken ct)
+        {
+            // 和 Load 一样，异常绝不许逃出后台任务。
+            try
+            {
+                var page = reader.ReadCommitPage(stream, ct);
+                if (ct.IsCancellationRequested)
+                    return;
+
+                Marshal(panel, ct, () => ApplyCommitPage(panel.Model, page, stream));
+            }
+            catch (Exception e)
+            {
+                ProcessHelper.WriteLog(string.Format(CultureInfo.InvariantCulture,
+                    "GitViewer: failed to read more commits: {0}", e));
+
+                Marshal(panel, ct, panel.Model.ApplyCommitsLoadFailure);
+            }
+        }
+
+        /// <summary>把一页提交交给视图模型。必须在 UI 线程上调用。</summary>
+        private static void ApplyCommitPage(GitPanelViewModel model, List<GitCommitInfo> page, GitRecordStream stream)
+        {
+            model.AppendCommits(page, stream.IsFinished);
+
+            // 中途出错时已经读到的那些仍然有效，但底下不能再显示成"已经读到最初的提交"。
+            if (stream.Failed)
+                model.ApplyCommitsLoadFailure();
         }
 
         /// <summary>

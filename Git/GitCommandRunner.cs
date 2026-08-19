@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Text;
 using System.Threading;
+using System.Threading.Tasks;
 
 namespace QuickLook.Plugin.GitViewer.Git
 {
@@ -34,7 +35,16 @@ namespace QuickLook.Plugin.GitViewer.Git
 
         private readonly object _lock = new object();
         private readonly List<Process> _running = new List<Process>();
+        private readonly List<GitRecordStream> _streams = new List<GitRecordStream>();
         private readonly string _startDirectory;
+
+        /// <summary>
+        ///     我们起的所有 git 进程都放在这个 job 里，释放时连子孙一起收掉。
+        ///     单靠 Process.Kill 是不够的，原因见 <see cref="GitProcessJob" />。
+        ///     创建不出来时为 null，那就退回只杀自己起的那个进程。
+        /// </summary>
+        private readonly GitProcessJob _job = GitProcessJob.TryCreate();
+
         private bool _disposed;
 
         public GitCommandRunner(string startDirectory)
@@ -45,19 +55,31 @@ namespace QuickLook.Plugin.GitViewer.Git
         /// <summary>杀掉所有还没结束的命令。由 IViewer.Cleanup 调用。</summary>
         public void Dispose()
         {
-            List<Process> snapshot;
+            List<Process> processes;
+            List<GitRecordStream> streams;
+
             lock (_lock)
             {
                 if (_disposed)
                     return;
 
                 _disposed = true;
-                snapshot = new List<Process>(_running);
+                processes = new List<Process>(_running);
+                streams = new List<GitRecordStream>(_streams);
                 _running.Clear();
+                _streams.Clear();
             }
 
-            foreach (var process in snapshot)
+            // 常驻的流会一直挂在那儿等 git 出数据，只有关掉它才会散。
+            foreach (var stream in streams)
+                stream.Dispose();
+
+            foreach (var process in processes)
                 TryKill(process);
+
+            // 兜底：上面杀的都是我们亲手起的那一层，job 负责收掉它们派生的真身。
+            if (_job != null)
+                _job.Dispose();
         }
 
         /// <summary>
@@ -73,24 +95,7 @@ namespace QuickLook.Plugin.GitViewer.Git
             if (exe == null)
                 return new GitResult { ExitCode = -1, StdErr = "git.exe not found" };
 
-            var startInfo = new ProcessStartInfo
-            {
-                FileName = exe,
-                Arguments = BuildArguments(args),
-                WorkingDirectory = _startDirectory,
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                RedirectStandardInput = true,
-                StandardOutputEncoding = new UTF8Encoding(false),
-                StandardErrorEncoding = new UTF8Encoding(false)
-            };
-
-            startInfo.Environment["GIT_OPTIONAL_LOCKS"] = "0";
-            startInfo.Environment["GIT_TERMINAL_PROMPT"] = "0";
-            startInfo.Environment["GIT_PAGER"] = "cat";
-            startInfo.Environment["GCM_INTERACTIVE"] = "never";
+            var startInfo = CreateStartInfo(exe, args);
 
             Process process = null;
             CancellationTokenRegistration registration = default(CancellationTokenRegistration);
@@ -100,6 +105,10 @@ namespace QuickLook.Plugin.GitViewer.Git
                 process = new Process { StartInfo = startInfo };
                 if (!process.Start())
                     return new GitResult { ExitCode = -1, StdErr = "failed to start git" };
+
+                // 越早进 job 越好：壳进程转眼就会派生出真身，那之后进来的就赶不上了。
+                if (_job != null)
+                    _job.Assign(process);
 
                 lock (_lock)
                 {
@@ -160,7 +169,115 @@ namespace QuickLook.Plugin.GitViewer.Git
             }
         }
 
-        private static void TryKill(Process process)
+        /// <summary>
+        ///     启动一条 git 命令但不等它结束，把标准输出包成
+        ///     <see cref="GitRecordStream" /> 交给调用方按需分批读取。
+        ///     <para>
+        ///     适合输出可能很长、又只想先看开头一小段的命令（比如整部历史的 git log）。
+        ///     进程会一直活到流被 <see cref="IDisposable.Dispose" />、令牌被取消
+        ///     或者本 runner 被释放为止。
+        ///     </para>
+        /// </summary>
+        /// <param name="ct">取消时杀掉进程。</param>
+        /// <param name="separator">切分记录用的字符。</param>
+        /// <param name="args">git 的参数。</param>
+        /// <returns>永不为 null；命令没起来时返回一个读不出东西的失败流。</returns>
+        public GitRecordStream Start(CancellationToken ct, char separator, params string[] args)
+        {
+            if (_disposed || ct.IsCancellationRequested)
+                return GitRecordStream.CreateFailed();
+
+            var exe = GitExecutable.Path;
+            if (exe == null)
+                return GitRecordStream.CreateFailed();
+
+            Process process = null;
+
+            try
+            {
+                process = new Process { StartInfo = CreateStartInfo(exe, args) };
+                if (!process.Start())
+                {
+                    process.Dispose();
+                    return GitRecordStream.CreateFailed();
+                }
+
+                // 越早进 job 越好：壳进程转眼就会派生出真身，那之后进来的就赶不上了。
+                if (_job != null)
+                    _job.Assign(process);
+
+                // 这里的 git 从不读 stdin；关掉它，万一 git 真去读也不会挂住。
+                process.StandardInput.Close();
+
+                // stderr 必须一直抽着。写满那个缓冲区的话 git 会卡在写错误输出上，
+                // 而我们正等在 stdout 那头，两边就一起僵住了。
+                var stderr = process.StandardError.ReadToEndAsync();
+                stderr.ContinueWith(t => { var ignored = t.Exception; },
+                    TaskContinuationOptions.OnlyOnFaulted);
+
+                var target = process;
+                var registration = ct.Register(() => TryKill(target));
+                var stream = new GitRecordStream(this, process, separator, registration);
+
+                lock (_lock)
+                {
+                    if (!_disposed)
+                    {
+                        _streams.Add(stream);
+                        return stream;
+                    }
+                }
+
+                // 抢在登记之前被释放了。这条流不会有人管，就地收掉。
+                stream.Dispose();
+                return GitRecordStream.CreateFailed();
+            }
+            catch (Exception)
+            {
+                if (process != null)
+                {
+                    TryKill(process);
+                    process.Dispose();
+                }
+
+                return GitRecordStream.CreateFailed();
+            }
+        }
+
+        /// <summary>由 <see cref="GitRecordStream.Dispose" /> 回调，把自己从清单里摘掉。</summary>
+        internal void Release(GitRecordStream stream)
+        {
+            lock (_lock)
+            {
+                _streams.Remove(stream);
+            }
+        }
+
+        private ProcessStartInfo CreateStartInfo(string exe, string[] args)
+        {
+            var startInfo = new ProcessStartInfo
+            {
+                FileName = exe,
+                Arguments = BuildArguments(args),
+                WorkingDirectory = _startDirectory,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                RedirectStandardInput = true,
+                StandardOutputEncoding = new UTF8Encoding(false),
+                StandardErrorEncoding = new UTF8Encoding(false)
+            };
+
+            startInfo.Environment["GIT_OPTIONAL_LOCKS"] = "0";
+            startInfo.Environment["GIT_TERMINAL_PROMPT"] = "0";
+            startInfo.Environment["GIT_PAGER"] = "cat";
+            startInfo.Environment["GCM_INTERACTIVE"] = "never";
+
+            return startInfo;
+        }
+
+        internal static void TryKill(Process process)
         {
             try
             {
